@@ -6,13 +6,10 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.project_files import MAX_FILE_BYTES, walk_tree
 from app.store import get_or_create_project, get_project, get_project_turns, list_projects
 
 router = APIRouter(prefix="/api/projects")
-
-_SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__", ".DS_Store", "dist", "build"}
-_MAX_DEPTH = 3
-_MAX_ENTRIES = 300
 
 
 class NewProject(BaseModel):
@@ -82,36 +79,15 @@ async def api_project_turns(project_id: int, limit: int = 200):
     return get_project_turns(project_id, limit=limit)
 
 
-def _walk(root: Path, rel: Path, depth: int) -> list[dict]:
-    if depth > _MAX_DEPTH:
-        return []
-    try:
-        entries = sorted(
-            (root / rel).iterdir(), key=lambda p: (p.is_file(), p.name.lower())
-        )
-    except (PermissionError, FileNotFoundError):
-        return []
-    out = []
-    for p in entries[:_MAX_ENTRIES]:
-        if p.name in _SKIP_DIRS:
-            continue
-        node = {"name": p.name, "path": str(rel / p.name), "is_dir": p.is_dir()}
-        if p.is_dir():
-            node["children"] = _walk(root, rel / p.name, depth + 1)
-        out.append(node)
-    return out
-
-
 @router.get("/{project_id}/files")
 async def api_project_files(project_id: int):
     project = get_project(project_id)
     if project is None:
         raise HTTPException(404, "project not found")
     root = Path(project["cwd"])
-    return {"cwd": str(root), "tree": _walk(root, Path("."), 0)}
+    return {"cwd": str(root), "tree": walk_tree(root)}
 
 
-_MAX_FILE_BYTES = 512_000
 _MARKDOWN_EXTS = {".md", ".markdown"}
 
 
@@ -127,7 +103,7 @@ async def api_project_file(project_id: int, path: str):
     if not full.is_file():
         raise HTTPException(404, "not a file")
     size = full.stat().st_size
-    if size > _MAX_FILE_BYTES:
+    if size > MAX_FILE_BYTES:
         raise HTTPException(413, f"file too large to preview ({size} bytes)")
     try:
         content = full.read_text(encoding="utf-8")

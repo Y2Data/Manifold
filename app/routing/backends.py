@@ -31,9 +31,10 @@ class BackendError(RuntimeError):
     pass
 
 
-async def _run(cmd: list[str], timeout_s: float | None = None) -> str:
+async def _run(cmd: list[str], timeout_s: float | None = None, cwd: str | None = None) -> str:
     proc = await asyncio.create_subprocess_exec(
         *cmd,
+        cwd=cwd,
         stdin=asyncio.subprocess.DEVNULL,  # else these can hang waiting on inherited stdin
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -59,11 +60,14 @@ async def run_raw_claude(prompt: str, model: str, timeout_s: float | None = None
     return json.loads(out).get("result", "")
 
 
-async def run_claude(prompt: str, model: str, timeout_s: float = 180.0) -> BackendResult:
+async def run_claude(
+    prompt: str, model: str, timeout_s: float = 180.0, cwd: str | None = None
+) -> BackendResult:
     t0 = time.monotonic()
     out = await _run(
         ["claude", "-p", prompt, "--model", model, "--output-format", "json"],
         timeout_s=timeout_s,
+        cwd=cwd,
     )
     latency_ms = int((time.monotonic() - t0) * 1000)
     data = json.loads(out)
@@ -80,7 +84,7 @@ async def run_claude(prompt: str, model: str, timeout_s: float = 180.0) -> Backe
     )
 
 
-async def run_codex(prompt: str, reasoning_effort: str) -> BackendResult:
+async def run_codex(prompt: str, reasoning_effort: str, cwd: str | None = None) -> BackendResult:
     """Runs codex exec at a given reasoning effort (low/medium/high) — the
     model itself is left at whatever's configured in ~/.codex/config.toml;
     effort is the tier dimension here, not the model name, since codex's
@@ -100,6 +104,7 @@ async def run_codex(prompt: str, reasoning_effort: str) -> BackendResult:
             "--json", "--skip-git-repo-check",
         ],
         timeout_s=180.0,
+        cwd=cwd,
     )
     latency_ms = int((time.monotonic() - t0) * 1000)
     text = ""

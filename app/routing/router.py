@@ -20,6 +20,7 @@ import asyncio
 import time
 import uuid
 
+from app.project_files import build_file_context
 from app.routing.backends import BackendError, BackendResult, run_claude, run_codex
 from app.routing.classifier import Tier, classify_with_model
 from app.routing.http_backend import run_http_connection
@@ -27,6 +28,7 @@ from app.store import (
     add_turn,
     get_connection,
     get_default_connection,
+    get_project,
     get_project_turns,
     list_default_connections,
 )
@@ -60,12 +62,18 @@ def _build_context(project_id: int, prompt: str) -> str:
     return "\n".join(lines)
 
 
-async def _run_connection(connection: dict, tier: Tier, prompt: str) -> BackendResult:
+async def _run_connection(
+    connection: dict, tier: Tier, prompt: str, project_cwd: str | None
+) -> BackendResult:
     if connection["kind"] == "subscription_cli":
+        # Real file tools live inside claude/codex themselves — just point
+        # the subprocess at the project dir, no text injection needed.
         if connection["cli"] == "codex":
-            return await run_codex(prompt, _CODEX_TIER_EFFORT[tier])
-        return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier])
-    return await run_http_connection(prompt, connection)
+            return await run_codex(prompt, _CODEX_TIER_EFFORT[tier], cwd=project_cwd)
+        return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier], cwd=project_cwd)
+    # HTTP connections (Kimi, etc.) have no tool-calling loop at all — the
+    # only way to give them any file awareness is pasting it into the prompt.
+    return await run_http_connection(build_file_context(project_cwd, prompt), connection)
 
 
 async def route(
@@ -78,6 +86,8 @@ async def route(
     """Returns a list of decision dicts (len 1 normally, len 2 on fan-out).
     Each also carries the BackendResult under 'result' for the caller."""
     context_prompt = _build_context(project_id, prompt)
+    project = get_project(project_id)
+    project_cwd = project["cwd"] if project else None
 
     add_turn(
         {
@@ -117,7 +127,7 @@ async def route(
     fanout_group = uuid.uuid4().hex[:12] if len(connections_to_run) > 1 else None
 
     results = await asyncio.gather(
-        *(_run_connection(c, tier, context_prompt) for c in connections_to_run),
+        *(_run_connection(c, tier, context_prompt, project_cwd) for c in connections_to_run),
         return_exceptions=True,
     )
 
