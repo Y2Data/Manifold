@@ -75,7 +75,7 @@ def connection_to_agent(connection: dict) -> dict:
     }
 
 
-def _session_common(project: dict, default_connection: dict | None) -> dict:
+def _session_common(project: dict, default_connection: dict | None, pending_elicitations: list[dict] = ()) -> dict:
     return {
         "id": ids.session_id(project["id"]),
         "agent_id": ids.agent_id(default_connection["id"]) if default_connection else "agent_none",
@@ -92,7 +92,7 @@ def _session_common(project: dict, default_connection: dict | None) -> dict:
         "permission_level": None,
         "owner": "local",
         "external_session_id": None,
-        "pending_elicitations_count": 0,
+        "pending_elicitations_count": len(pending_elicitations),
         "workspace": project["cwd"],
         "git_branch": None,
         "archived": False,
@@ -105,19 +105,25 @@ def _session_common(project: dict, default_connection: dict | None) -> dict:
     }
 
 
-def project_to_session_list_item(project: dict, default_connection: dict | None) -> dict:
-    return {**_session_common(project, default_connection), "updated_at": int(project["last_used_at"])}
+def project_to_session_list_item(project: dict, default_connection: dict | None, pending_elicitations: list[dict] = ()) -> dict:
+    return {
+        **_session_common(project, default_connection, pending_elicitations),
+        "updated_at": int(project["last_used_at"]),
+    }
 
 
-def project_to_session_response(project: dict, turns: list[dict], default_connection: dict | None) -> dict:
+def project_to_session_response(
+    project: dict, turns: list[dict], default_connection: dict | None, pending_elicitations: list[dict] = ()
+) -> dict:
     items: list[dict] = []
     for turn in turns:
         items.extend(turn_to_conversation_items(turn))
     return {
-        **_session_common(project, default_connection),
+        **_session_common(project, default_connection, pending_elicitations),
         "background_task_count": 0,
         "host_resumable": False,
         "items": items,
+        "pending_elicitations": list(pending_elicitations),
         "sub_agent_name": None,
         "parent_session_id": None,
         "root_conversation_id": None,

@@ -15,7 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
-from app.omnigent_compat import ids, mapping, routes_stream
+from app.omnigent_compat import ids, mapping, permissions, routes_stream
 from app.routing.backends import BackendError
 from app.routing.router import route
 from app.store import (
@@ -70,7 +70,10 @@ async def list_sessions(
     # but otherwise unused.
     default_connection = _fallback_default_connection()
     projects = list_projects()[:limit]
-    data = [mapping.project_to_session_list_item(p, default_connection) for p in projects]
+    data = [
+        mapping.project_to_session_list_item(p, default_connection, permissions.list_pending_for_project(p["id"]))
+        for p in projects
+    ]
     return {
         "object": "list",
         "data": data,
@@ -120,7 +123,8 @@ async def get_session(session_id: str, include_items: bool = True, include_liven
         raise HTTPException(404, "session not found")
     default_connection = _fallback_default_connection()
     turns = get_project_turns(project_id) if include_items else []
-    return mapping.project_to_session_response(project, turns, default_connection)
+    pending = permissions.list_pending_for_project(project_id)
+    return mapping.project_to_session_response(project, turns, default_connection, pending)
 
 
 class UpdateSessionBody(BaseModel):
@@ -153,7 +157,8 @@ async def patch_session(session_id: str, body: UpdateSessionBody):
         raise HTTPException(404, "session not found")
     default_connection = _fallback_default_connection()
     turns = get_project_turns(project_id)
-    return mapping.project_to_session_response(project, turns, default_connection)
+    pending = permissions.list_pending_for_project(project_id)
+    return mapping.project_to_session_response(project, turns, default_connection, pending)
 
 
 @router.get("/v1/sessions/{session_id}/items")
@@ -261,6 +266,27 @@ def _publish_status(session_id: str, status: str, error: str | None = None) -> N
             "background_task_count": 0 if status == "idle" else None,
         },
     )
+
+
+class ElicitationResolveBody(BaseModel):
+    # Real shape confirmed straight from the vendored bundle's own JS
+    # (function O4e / the button click handlers in index-CFYup66L.js):
+    # plain Approve/Reject send {"action": "accept"|"decline"} with no
+    # `content`; the "don't ask again" variant adds a `content` dict.
+    action: str
+    content: dict | None = None
+
+
+@router.post("/v1/sessions/{session_id}/elicitations/{elicitation_id}/resolve")
+async def resolve_elicitation(session_id: str, elicitation_id: str, body: ElicitationResolveBody):
+    if permissions.find_project_id_for_elicitation(elicitation_id) is None:
+        raise HTTPException(404, "elicitation not found")
+    if body.action not in ("accept", "decline"):
+        raise HTTPException(400, f"unsupported action: {body.action!r}")
+    ok = permissions.resolve_pending(elicitation_id, body.action, body.content)
+    if not ok:
+        raise HTTPException(409, "elicitation already resolved")
+    return {"ok": True}
 
 
 _EMPTY_LIST = {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}

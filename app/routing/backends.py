@@ -11,8 +11,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import sys
+import tempfile
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 
 @dataclass
@@ -31,10 +35,40 @@ class BackendError(RuntimeError):
     pass
 
 
-async def _run(cmd: list[str], timeout_s: float | None = None, cwd: str | None = None) -> str:
+# app/hooks/permission_hook.py — a standalone PreToolUse hook script (not
+# imported) attached per-invocation via a generated --settings file below,
+# never the user's real ~/.claude/settings.json. See run_claude().
+_PERMISSION_HOOK_SCRIPT = str(Path(__file__).resolve().parent.parent / "hooks" / "permission_hook.py")
+_INTERACTIVE_TIMEOUT_S = 3600.0  # must comfortably exceed the hook's own timeout below
+_DEFAULT_TIMEOUT_S = 180.0
+
+
+def _permission_settings_json() -> str:
+    return json.dumps(
+        {
+            "hooks": {
+                "PreToolUse": [
+                    {
+                        "matcher": "*",
+                        "hooks": [
+                            {
+                                "type": "command",
+                                "command": f"{sys.executable} {_PERMISSION_HOOK_SCRIPT}",
+                                "timeout": 3600,
+                            }
+                        ],
+                    }
+                ]
+            }
+        }
+    )
+
+
+async def _run(cmd: list[str], timeout_s: float | None = None, cwd: str | None = None, env: dict | None = None) -> str:
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         cwd=cwd,
+        env=env,
         stdin=asyncio.subprocess.DEVNULL,  # else these can hang waiting on inherited stdin
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
@@ -61,14 +95,37 @@ async def run_raw_claude(prompt: str, model: str, timeout_s: float | None = None
 
 
 async def run_claude(
-    prompt: str, model: str, timeout_s: float = 180.0, cwd: str | None = None
+    prompt: str, model: str, timeout_s: float | None = None, cwd: str | None = None, project_id: int | None = None
 ) -> BackendResult:
+    """project_id, when given, attaches a PreToolUse hook (see
+    _permission_settings_json) that routes any tool-permission decision
+    through manifold-deck's own UI instead of the headless-mode default of
+    silently auto-denying restricted tools — see app/hooks/permission_hook.py
+    and app/omnigent_compat/routes_internal.py for the other end of this.
+    Without it (e.g. the classifier's internal calls), behavior is unchanged
+    from before this existed."""
     t0 = time.monotonic()
-    out = await _run(
-        ["claude", "-p", prompt, "--model", model, "--output-format", "json"],
-        timeout_s=timeout_s,
-        cwd=cwd,
-    )
+    cmd = ["claude", "-p", prompt, "--model", model, "--output-format", "json"]
+    env = None
+    settings_path = None
+    if project_id is not None:
+        timeout_s = timeout_s or _INTERACTIVE_TIMEOUT_S
+        fd, settings_path = tempfile.mkstemp(prefix="manifold-claude-settings-", suffix=".json")
+        with os.fdopen(fd, "w") as f:
+            f.write(_permission_settings_json())
+        cmd += ["--settings", settings_path, "--permission-mode", "default"]
+        env = {
+            **os.environ,
+            "MANIFOLD_PROJECT_ID": str(project_id),
+            "MANIFOLD_BRIDGE_PORT": os.environ.get("UI_PORT", "8080"),
+        }
+    else:
+        timeout_s = timeout_s or _DEFAULT_TIMEOUT_S
+    try:
+        out = await _run(cmd, timeout_s=timeout_s, cwd=cwd, env=env)
+    finally:
+        if settings_path:
+            os.unlink(settings_path)
     latency_ms = int((time.monotonic() - t0) * 1000)
     data = json.loads(out)
     usage = data.get("usage") or {}

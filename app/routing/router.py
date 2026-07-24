@@ -64,7 +64,7 @@ def _build_context(project_id: int, prompt: str) -> str:
 
 
 async def _run_connection(
-    connection: dict, tier: Tier, prompt: str, project_cwd: str | None
+    connection: dict, tier: Tier, prompt: str, project_cwd: str | None, project_id: int
 ) -> BackendResult:
     if connection["kind"] == "subscription_cli":
         # Real file tools live inside claude/codex themselves — just point
@@ -72,7 +72,7 @@ async def _run_connection(
         if connection["cli"] == "codex":
             return await run_codex(prompt, _CODEX_TIER_EFFORT[tier], cwd=project_cwd)
         if connection["cli"] == "claude":
-            return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier], cwd=project_cwd)
+            return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier], cwd=project_cwd, project_id=project_id)
         # Any other CLI: routable purely from its stored connection config
         # (cli_argv_template / cli_output_mode), no hardcoded per-CLI Python.
         return await run_generic_cli(
@@ -135,7 +135,7 @@ async def route(
     fanout_group = uuid.uuid4().hex[:12] if len(connections_to_run) > 1 else None
 
     results = await asyncio.gather(
-        *(_run_connection(c, tier, context_prompt, project_cwd) for c in connections_to_run),
+        *(_run_connection(c, tier, context_prompt, project_cwd, project_id) for c in connections_to_run),
         return_exceptions=True,
     )
 
