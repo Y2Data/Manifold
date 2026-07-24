@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 # Idempotent: start the dashboard/router in the background.
+# Runs bootstrap first (cheap no-op once deps are synced) so a fresh clone
+# only needs this one command — no separate `./manifold bootstrap` step.
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+
+bash scripts/bootstrap.sh
 
 mkdir -p data
 
