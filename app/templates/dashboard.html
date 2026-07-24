@@ -15,86 +15,108 @@
   </script>
   <style>
     :root {
-      --bg: #1b1b1a; --panel: #232322; --panel-2: #2c2c2a; --border: #3a3a37;
-      --text: #ececea; --muted: #9c9a94; --accent: #e2536b; --accent-2: #6d8fe0;
-      --simple: #4fae80; --medium: #d9a341; --complex: #e0637e; --pinned: #6d8fe0;
-      --on-accent: #fff; --shadow: rgba(0,0,0,.45); --overlay: rgba(10,10,10,.6);
-      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-      --sans: -apple-system, "SF Pro Text", system-ui, sans-serif;
-      color-scheme: dark;
+      /* paper (default) */
+      --bg: #FAFAF8; --surface: #FFFFFF; --surface-2: #F1EFE6; --border: #E4E1D8;
+      --text: #1C1B18; --muted: #6B6858;
+      --accent: #2F6F5E; --accent-strong: #24594B; --accent-soft: color-mix(in srgb, #2F6F5E 14%, transparent);
+      --tier-simple: #5C8A72; --tier-medium: #C1893C; --tier-complex: #B75B3D; --tier-null: #948E7C;
+      /* Darker "ink" shades of the same hues, used only for pill TEXT on a
+         tinted pill background — the base --tier-* vars stay lighter for
+         decorative uses (routing rail) where WCAG text-contrast doesn't apply. */
+      --tier-simple-ink: #486b59; --tier-medium-ink: #87602a; --tier-complex-ink: #9c4e34; --pill-ink: #746f5f;
+      --shadow: rgba(28,27,24,.10); --overlay: rgba(28,27,24,.42);
+      --font-sans: -apple-system, "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+      --radius-sm: 6px; --radius-md: 10px;
+      color-scheme: light;
     }
     /* System preference is the default; an explicit data-theme (the header
        toggle, persisted in localStorage) always wins over it. */
-    @media (prefers-color-scheme: light) {
-      :root:not([data-theme="dark"]) {
-        --bg: #faf8f6; --panel: #ffffff; --panel-2: #f2efe9; --border: #e7e2d9;
-        --text: #211f1c; --muted: #837d72; --accent: #d94a63; --accent-2: #4a6fd0;
-        --simple: #2f8f66; --medium: #ab7213; --complex: #c23e58; --pinned: #4a6fd0;
-        --on-accent: #fff; --shadow: rgba(40,35,20,.08); --overlay: rgba(30,26,18,.35);
-        color-scheme: light;
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #1B1A17; --surface: #232220; --surface-2: #2B2A26; --border: #3A382E;
+        --text: #EDEBE2; --muted: #A19C8A;
+        --accent: #4FA189; --accent-strong: #6BBBA2; --accent-soft: color-mix(in srgb, #4FA189 18%, transparent);
+        --tier-simple: #7FAF8E; --tier-medium: #DDA85B; --tier-complex: #D0805F; --tier-null: #85806E;
+        --tier-simple-ink: #82b191; --tier-medium-ink: #dda85b; --tier-complex-ink: #d69073; --pill-ink: #948f7e;
+        --shadow: rgba(0,0,0,.4); --overlay: rgba(0,0,0,.55);
+        color-scheme: dark;
       }
     }
-    :root[data-theme="light"] {
-      --bg: #faf8f6; --panel: #ffffff; --panel-2: #f2efe9; --border: #e7e2d9;
-      --text: #211f1c; --muted: #837d72; --accent: #d94a63; --accent-2: #4a6fd0;
-      --simple: #2f8f66; --medium: #ab7213; --complex: #c23e58; --pinned: #4a6fd0;
-      --on-accent: #fff; --shadow: rgba(40,35,20,.08); --overlay: rgba(30,26,18,.35);
-      color-scheme: light;
+    :root[data-theme="dark"] {
+      --bg: #1B1A17; --surface: #232220; --surface-2: #2B2A26; --border: #3A382E;
+      --text: #EDEBE2; --muted: #A19C8A;
+      --accent: #4FA189; --accent-strong: #6BBBA2; --accent-soft: color-mix(in srgb, #4FA189 18%, transparent);
+      --tier-simple: #7FAF8E; --tier-medium: #DDA85B; --tier-complex: #D0805F; --tier-null: #85806E;
+      --tier-simple-ink: #82b191; --tier-medium-ink: #dda85b; --tier-complex-ink: #d69073; --pill-ink: #948f7e;
+      --shadow: rgba(0,0,0,.4); --overlay: rgba(0,0,0,.55);
+      color-scheme: dark;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      font-family: var(--sans);
+      font-family: var(--font-sans);
       background: var(--bg); color: var(--text); display: flex; flex-direction: column;
-      transition: background-color .15s ease, color .15s ease;
+      -webkit-font-smoothing: antialiased;
     }
+    body, button, input, select, textarea { transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
+    @media (prefers-reduced-motion: reduce) {
+      * { transition: none !important; animation: none !important; }
+    }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
     header {
-      display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-      padding: .8rem 1.1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
-      flex-wrap: wrap;
+      display: flex; align-items: center; justify-content: space-between; gap: .9rem;
+      padding: .7rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      flex-wrap: wrap; background: var(--surface);
     }
-    .hdr-left { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+    .hdr-left { display: flex; align-items: center; gap: .6rem; min-width: 0; }
     h1 {
-      font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
+      font-family: var(--font-mono); font-size: 1rem; font-weight: 600; letter-spacing: -.01em;
       margin: 0; white-space: nowrap; color: var(--text);
     }
-    .hdr-right { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; flex-wrap: wrap; }
-    .hdr-stats {
-      display: flex; gap: .55rem; font-size: .74rem; color: var(--muted); flex-wrap: wrap; align-items: center;
+    h1 .dot { color: var(--accent); }
+    .hdr-stats { display: flex; gap: .55rem; font-size: .72rem; color: var(--muted); flex-wrap: wrap; align-items: center; font-family: var(--font-mono); }
+    .hdr-stats .stat { display: flex; align-items: baseline; gap: .3rem; }
+    .hdr-stats .stat b { color: var(--text); font-weight: 600; }
+    .hdr-stats .stat-label { text-transform: uppercase; letter-spacing: .04em; font-size: .66rem; }
+    .hdr-stats .divider { width: 1px; height: .9em; background: var(--border); }
+    .hdr-tiers { display: flex; gap: .3rem; flex-wrap: wrap; }
+    .hdr-actions { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; }
+    /* .btn.panel-toggle (not .panel-toggle alone) so this reliably beats the
+       later, equal-specificity `.btn { display: inline-flex }` rule below —
+       otherwise source order makes .btn win and these stay visible on desktop. */
+    .btn.panel-toggle { display: none; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: .35rem; background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); border-radius: var(--radius-sm); padding: .38rem .65rem; font-size: .78rem;
+      font-family: var(--font-sans); cursor: pointer; line-height: 1.1;
     }
-    .hdr-stats b { color: var(--text); font-weight: 600; }
-    .panel-toggle {
-      display: none; background: none; border: none; color: var(--text);
-      border-radius: 8px; padding: .35rem .5rem; font-size: .82rem; cursor: pointer; flex-shrink: 0;
+    .btn:hover { background: var(--surface-2); }
+    .btn:disabled { opacity: .5; cursor: default; }
+    .btn.icon-only { padding: .38rem .5rem; }
+
+    .pill {
+      display: inline-flex; align-items: center; gap: .3rem; padding: .16rem .5rem; border-radius: 999px;
+      font-size: .66rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+      font-family: var(--font-mono); white-space: nowrap;
     }
-    .icon-btn {
-      display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
-      background: none; border: none; color: var(--muted);
-      border-radius: 999px; width: 2rem; height: 2rem; font-size: .95rem; cursor: pointer;
-    }
-    .icon-btn:hover { background: var(--panel-2); color: var(--text); }
-    .icon-btn.wide { width: auto; padding: 0 .8rem; font-size: .8rem; font-weight: 500; }
-    .tag {
-      display: inline-flex; align-items: center; padding: .16rem .55rem; border-radius: 999px;
-      font-size: .7rem; font-weight: 600;
-    }
-    .tag-SIMPLE  { background: color-mix(in srgb, var(--simple) 16%, transparent); color: var(--simple); }
-    .tag-MEDIUM  { background: color-mix(in srgb, var(--medium) 16%, transparent); color: var(--medium); }
-    .tag-COMPLEX { background: color-mix(in srgb, var(--complex) 16%, transparent); color: var(--complex); }
-    .tag-PINNED, .tag-null { background: color-mix(in srgb, var(--pinned) 16%, transparent); color: var(--pinned); }
-    code {
-      background: var(--panel-2); padding: .12rem .4rem; border-radius: 5px;
-      font-size: .85em; font-family: var(--mono);
-    }
+    .pill-SIMPLE  { background: color-mix(in srgb, var(--tier-simple) 16%, var(--surface));  color: var(--tier-simple-ink); }
+    .pill-MEDIUM  { background: color-mix(in srgb, var(--tier-medium) 16%, var(--surface));  color: var(--tier-medium-ink); }
+    .pill-COMPLEX { background: color-mix(in srgb, var(--tier-complex) 16%, var(--surface)); color: var(--tier-complex-ink); }
+    .pill-null,
+    .pill-PINNED  { background: transparent; color: var(--pill-ink); border: 1px solid var(--border); }
+    code { background: var(--surface-2); border: 1px solid var(--border); padding: .1rem .35rem; border-radius: 5px; font-size: .85em; font-family: var(--font-mono); }
 
     .layout {
       flex: 1; display: grid; min-height: 0; position: relative;
-      grid-template-columns: clamp(200px, 19vw, 260px) 1fr clamp(180px, 18vw, 260px);
+      grid-template-columns: clamp(180px, 18vw, 240px) 1fr clamp(180px, 18vw, 260px);
     }
-    .pane { overflow-y: auto; }
-    .pane-left { border-right: 1px solid var(--border); padding: .9rem; }
-    .pane-right { border-left: 1px solid var(--border); padding: .9rem; }
-    .pane-center { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    .pane { overflow-y: auto; background: var(--surface); }
+    .pane-left { border-right: 1px solid var(--border); padding: .85rem; }
+    .pane-right { border-left: 1px solid var(--border); padding: .85rem; }
+    .pane-center { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--bg); }
     .backdrop { display: none; grid-column: 1 / -1; }
 
     /* Below this width the side panes become slide-in overlays instead of
@@ -102,10 +124,10 @@
        otherwise ate the whole viewport on narrow windows). */
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
-      .panel-toggle { display: inline-block; }
+      .btn.panel-toggle { display: inline-flex; }
       .pane-left, .pane-right {
-        position: fixed; top: 0; bottom: 0; width: min(80vw, 300px); z-index: 20;
-        background: var(--bg); transition: transform .2s ease; box-shadow: 0 0 40px var(--shadow);
+        position: fixed; top: 0; bottom: 0; width: min(82vw, 300px); z-index: 20;
+        transition: transform .18s ease; box-shadow: 0 0 40px var(--shadow);
       }
       .pane-left { left: 0; transform: translateX(-101%); }
       .pane-left.open { transform: translateX(0); }
@@ -115,110 +137,132 @@
         display: none; position: fixed; inset: 0; background: var(--overlay); z-index: 15;
       }
       .backdrop.open { display: block; }
-      .fanout-row { flex-direction: column; }
     }
+
+    .section-label {
+      font-family: var(--font-mono); font-size: .66rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+      margin: 0 0 .5rem; font-weight: 600;
+    }
+    .pane-right .section-label { margin-top: 0; }
+
+    .search-wrap { position: relative; margin-bottom: .7rem; }
+    .search-wrap .search-icon {
+      position: absolute; left: .55rem; top: 50%; transform: translateY(-50%);
+      color: var(--muted); font-size: .78rem; pointer-events: none;
+    }
+    #project-search {
+      width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .42rem .6rem .42rem 1.65rem; font-size: .8rem;
+      font-family: var(--font-sans);
+    }
+    #project-search:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
     .proj-item {
-      padding: .55rem .6rem; border-radius: 10px; cursor: pointer; font-size: .85rem;
-      margin-bottom: .1rem; color: var(--text);
-      display: flex; align-items: center; justify-content: space-between; gap: .3rem;
+      padding: .45rem .55rem; border-radius: var(--radius-sm); cursor: pointer; font-size: .82rem;
+      margin-bottom: .1rem; color: var(--muted);
+      display: flex; align-items: center; justify-content: space-between; gap: .4rem;
+      border: 1px solid transparent;
     }
-    .proj-item:hover { background: var(--panel-2); }
-    .proj-item.active { background: var(--panel-2); }
-    .proj-item .proj-main { min-width: 0; flex: 1; }
+    .proj-item:hover { background: var(--surface-2); }
+    .proj-item.active { background: var(--accent-soft); color: var(--text); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+    .proj-item .proj-main { min-width: 0; flex: 1; overflow: hidden; }
+    .proj-item .proj-name {
+      font-family: var(--font-sans); font-size: .83rem; color: var(--text);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .proj-item.active .proj-name { color: var(--accent-strong); font-weight: 600; }
     .proj-item .cwd {
-      font-size: .72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      font-family: var(--font-mono); font-size: .67rem; color: var(--muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
-    .proj-item .proj-actions { flex-shrink: 0; display: flex; gap: 0; opacity: 0; transition: opacity .1s; }
-    .proj-item:hover .proj-actions, .proj-item.active .proj-actions { opacity: 1; }
-    .proj-item .proj-star.starred { opacity: 1; }
+    .proj-item .proj-actions { flex-shrink: 0; display: flex; gap: .05rem; }
     .proj-item .proj-star, .proj-item .proj-delete {
       flex-shrink: 0; background: none; border: none; color: var(--muted); cursor: pointer;
-      font-size: .82rem; padding: .2rem .35rem; border-radius: 6px; line-height: 1;
+      font-size: .78rem; padding: .15rem .3rem; border-radius: 4px; line-height: 1; opacity: 0;
     }
-    .proj-item .proj-star:hover, .proj-item .proj-delete:hover { background: var(--border); color: var(--text); }
-    .proj-item .proj-star.starred { color: var(--medium); }
-    #project-search {
-      width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid transparent;
-      border-radius: 10px; padding: .5rem .7rem; font-size: .82rem; margin-bottom: .6rem;
+    .proj-item:hover .proj-star, .proj-item:focus-within .proj-star,
+    .proj-item:hover .proj-delete, .proj-item:focus-within .proj-delete { opacity: 1; }
+    .proj-item .proj-star.starred { opacity: 1; color: var(--tier-medium); }
+    .proj-item .proj-star:hover { background: var(--surface); color: var(--tier-medium); }
+    .proj-item .proj-delete:hover { background: var(--surface); color: var(--tier-complex); }
+    /* No hover on touch — keep the delete affordance visible/tappable instead
+       of relying on a hover state that touch input can never trigger. */
+    @media (hover: none), (pointer: coarse) {
+      .proj-item .proj-star, .proj-item .proj-delete { opacity: 1; }
     }
-    #project-search:focus { outline: none; border-color: var(--border); }
-    .section-label {
-      font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
-      margin: 1rem 0 .35rem; font-weight: 600; padding: 0 .6rem;
-    }
-    .section-label:first-child { margin-top: 0; }
-    .add-project { display: flex; gap: .35rem; margin-top: .6rem; }
+
+    .add-project { display: flex; gap: .3rem; margin-top: .6rem; }
     .add-project input {
-      flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid transparent;
-      border-radius: 8px; padding: .45rem .55rem; font-size: .78rem;
+      flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .38rem .5rem; font-size: .74rem; font-family: var(--font-mono);
     }
-    .add-project input:focus { outline: none; border-color: var(--border); }
     .add-project button {
-      background: var(--panel-2); color: var(--text); border: none;
-      border-radius: 8px; padding: .45rem .7rem; font-size: .78rem; cursor: pointer;
+      background: var(--surface); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .38rem .55rem; font-size: .74rem; cursor: pointer;
     }
-    .add-project button:hover { background: var(--border); }
+    .add-project button:hover { background: var(--surface-2); }
 
-    .thread { flex: 1; overflow-y: auto; padding: 1.5rem; }
-    .thread-inner { max-width: 760px; margin: 0 auto; }
-    .empty-hero {
-      max-width: 480px; margin: 10vh auto 0; text-align: center; color: var(--muted); font-size: .92rem;
-    }
-    .empty-hero .spark { font-size: 1.8rem; display: block; margin-bottom: .6rem; }
-    .empty-hero h2 { font-size: 1.3rem; color: var(--text); font-weight: 600; margin: 0 0 .4rem; }
-    .turn-user {
-      color: var(--muted); font-size: .82rem; margin: 1.5rem 0 .6rem; max-width: 760px;
-    }
-    .turn-user:first-child { margin-top: 0; }
-    .turn-user b { color: var(--text); font-weight: 600; }
-    .fanout-row { display: flex; gap: .7rem; max-width: 760px; }
-    .response-card {
-      flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--border);
-      border-radius: 14px; padding: 1rem;
-    }
-    .response-meta {
-      display: flex; gap: .5rem; align-items: center; font-size: .72rem; color: var(--muted);
-      margin-bottom: .6rem; flex-wrap: wrap;
-    }
-    .response-meta code { font-size: .82em; }
-    .empty-state { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 3rem; }
+    /* ---- conversation thread ---- */
+    .thread { flex: 1; overflow-y: auto; padding: 1.5rem 1.25rem; }
+    .thread-inner { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 1.1rem; }
+    .empty-state { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 3rem; font-family: var(--font-mono); }
 
-    .composer { padding: 1rem 1.5rem 1.4rem; flex-shrink: 0; }
-    .composer-inner { max-width: 760px; margin: 0 auto; }
-    .composer-box {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: .7rem .9rem .6rem;
+    .msg-user { align-self: flex-end; max-width: 82%; }
+    .msg-user .msg-head {
+      font-family: var(--font-mono); font-size: .66rem; color: var(--muted); text-transform: uppercase;
+      letter-spacing: .05em; margin-bottom: .3rem; text-align: right;
     }
+    .msg-user .msg-bubble {
+      background: var(--surface-2); border-radius: var(--radius-md); padding: .65rem .9rem;
+      font-size: .92rem; line-height: 1.5; color: var(--text); white-space: pre-wrap; word-break: break-word;
+    }
+
+    .msg-assistant { display: flex; gap: .8rem; align-self: stretch; }
+    .msg-rail { width: 3px; border-radius: 3px; flex-shrink: 0; background: var(--rail-color, var(--tier-null)); }
+    .msg-content { flex: 1; min-width: 0; }
+    .msg-meta {
+      display: flex; gap: .55rem; align-items: center; font-size: .68rem; color: var(--muted);
+      margin-bottom: .5rem; font-family: var(--font-mono); flex-wrap: wrap;
+    }
+    .msg-meta .meta-code { color: var(--muted); }
+    .msg-meta .meta-sep { opacity: .5; }
+
+    .composer { border-top: 1px solid var(--border); padding: .9rem 1.25rem 1.1rem; flex-shrink: 0; background: var(--surface); }
     .composer textarea {
-      width: 100%; background: none; color: var(--text); border: none;
-      padding: .2rem 0; font-family: inherit; font-size: .92rem;
-      resize: vertical; min-height: 2.6rem; display: block;
+      width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: .65rem .85rem; font-family: var(--font-sans); font-size: .9rem;
+      resize: vertical; min-height: 3.6rem; line-height: 1.45;
     }
-    .composer textarea:focus { outline: none; }
-    .composer-row { display: flex; gap: .6rem; align-items: center; margin-top: .5rem; }
+    .composer textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    .composer-row { display: flex; gap: .7rem; align-items: center; margin-top: .55rem; }
     .composer button#send {
-      background: var(--text); color: var(--bg);
-      border: none; border-radius: 10px; padding: .45rem 1.1rem; font-size: .84rem;
-      font-weight: 600; cursor: pointer;
+      background: var(--accent); color: #fff;
+      border: none; border-radius: var(--radius-sm); padding: .48rem 1.15rem; font-size: .82rem;
+      font-weight: 600; cursor: pointer; font-family: var(--font-sans);
     }
-    .composer button#send:disabled { opacity: .4; cursor: default; }
-    .advanced-toggle { font-size: .78rem; color: var(--muted); cursor: pointer; }
+    .composer button#send:hover { background: var(--accent-strong); }
+    .composer button#send:disabled { opacity: .45; cursor: default; }
+    .advanced-toggle {
+      font-size: .72rem; color: var(--muted); cursor: pointer; font-family: var(--font-mono);
+      text-transform: uppercase; letter-spacing: .04em;
+    }
     .advanced-toggle:hover { color: var(--text); }
-    .advanced-row { display: none; gap: .5rem; margin-top: .6rem; }
+    .advanced-row { display: none; gap: .5rem; margin-top: .55rem; }
     .advanced-row.open { display: flex; }
     .advanced-row select {
-      background: var(--panel-2); color: var(--text); border: 1px solid transparent;
-      border-radius: 8px; padding: .4rem .6rem; font-size: .78rem;
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .38rem .55rem; font-size: .76rem; font-family: var(--font-mono);
     }
-    #status { color: var(--muted); font-size: .78rem; margin-left: .2rem; }
+    #status { color: var(--muted); font-size: .74rem; margin-left: .3rem; font-family: var(--font-mono); }
 
-    .file-tree { font-size: .8rem; }
-    .file-tree ul { list-style: none; margin: 0; padding-left: 1.1rem; }
+    /* ---- file tree ---- */
+    .file-tree { font-size: .78rem; font-family: var(--font-mono); }
+    .file-tree ul { list-style: none; margin: 0; padding-left: 1rem; }
     .file-tree > ul { padding-left: 0; }
-    .file-tree li { padding: .15rem 0; color: var(--muted); white-space: nowrap; }
+    .file-tree li { padding: .12rem 0; color: var(--muted); white-space: nowrap; }
     .file-tree .dir { color: var(--text); font-weight: 600; }
-    .file-tree .file-name { cursor: pointer; }
-    .file-tree .file-name:hover { color: var(--text); text-decoration: underline; }
+    .file-tree .file-name { cursor: pointer; border-radius: 3px; }
+    .file-tree .file-name:hover { color: var(--accent-strong); text-decoration: underline; }
 
     .modal-overlay {
       display: none; position: fixed; inset: 0; background: var(--overlay);
@@ -226,98 +270,99 @@
     }
     .modal-overlay.open { display: flex; }
     .modal-box {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
+      background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md);
       width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column;
       box-shadow: 0 20px 60px var(--shadow);
     }
     .modal-header {
       display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-      padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      padding: .85rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
-    .modal-header .title { font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .modal-header .title { font-size: .85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
     .modal-close {
-      background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; line-height: 1; flex-shrink: 0;
+      background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; line-height: 1; flex-shrink: 0;
+      border-radius: 4px;
     }
     .modal-close:hover { color: var(--text); }
-    .modal-body { padding: 1.1rem; overflow-y: auto; }
-    .modal-footer { padding: .8rem 1.1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: .5rem; flex-shrink: 0; }
+    .modal-body { padding: 1rem; overflow-y: auto; }
+    .modal-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: .5rem; flex-shrink: 0; }
 
     .new-folder-row { display: flex; gap: .4rem; margin-bottom: .6rem; align-items: center; }
     .new-folder-row input {
-      flex: 1; background: var(--panel-2); color: var(--text); border: 1px solid transparent;
-      border-radius: 8px; padding: .4rem .5rem; font-size: .8rem;
+      flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .4rem .5rem; font-size: .8rem;
     }
 
-    .conn-list { list-style: none; margin: 0 0 .5rem; padding: 0; font-size: .85rem; }
+    .conn-list { list-style: none; margin: 0 0 .5rem; padding: 0; font-size: .82rem; }
     .conn-list li {
       display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-      padding: .6rem .7rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: .45rem;
-      background: var(--panel-2);
+      padding: .5rem .6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); margin-bottom: .4rem;
+      background: var(--bg);
     }
     .conn-list .conn-info { min-width: 0; }
     .conn-list .conn-name { font-weight: 600; }
-    .conn-list .conn-meta { font-size: .74rem; color: var(--muted); }
+    .conn-list .conn-meta { font-size: .72rem; color: var(--muted); font-family: var(--font-mono); }
     .conn-list .conn-del {
-      background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 999px;
-      padding: .3rem .65rem; font-size: .74rem; cursor: pointer; flex-shrink: 0;
+      background: none; border: 1px solid var(--border); color: var(--muted); border-radius: var(--radius-sm);
+      padding: .25rem .55rem; font-size: .72rem; cursor: pointer; flex-shrink: 0;
     }
-    .conn-list .conn-del:hover { color: var(--complex); border-color: var(--complex); }
+    .conn-list .conn-del:hover { color: var(--tier-complex); border-color: var(--tier-complex); }
     .conn-form { display: flex; flex-direction: column; gap: .5rem; }
     .conn-form input, .conn-form select {
-      background: var(--panel-2); color: var(--text); border: 1px solid transparent;
-      border-radius: 10px; padding: .55rem .65rem; font-size: .85rem; width: 100%;
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .5rem .6rem; font-size: .82rem; width: 100%; font-family: var(--font-sans);
     }
-    .conn-form input:focus, .conn-form select:focus { outline: none; border-color: var(--border); }
-    .browse-list { list-style: none; margin: 0; padding: 0; font-size: .88rem; }
+    .browse-list { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
     .browse-list li {
-      padding: .5rem .55rem; border-radius: 8px; cursor: pointer; color: var(--text);
+      padding: .45rem .5rem; border-radius: var(--radius-sm); cursor: pointer; color: var(--text);
     }
-    .browse-list li:hover { background: var(--panel-2); }
+    .browse-list li:hover { background: var(--surface-2); }
     .browse-list li.up { color: var(--muted); }
     .modal-btn {
-      background: var(--panel-2); color: var(--text); border: 1px solid transparent;
-      border-radius: 10px; padding: .5rem 1rem; font-size: .82rem; cursor: pointer;
+      background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: .45rem .9rem; font-size: .82rem; cursor: pointer;
+      font-family: var(--font-sans);
     }
-    .modal-btn:hover { border-color: var(--border); }
-    .modal-btn.primary { background: var(--text); color: var(--bg); font-weight: 600; }
-    .modal-btn.primary:hover { opacity: .88; border-color: transparent; }
+    .modal-btn:hover { background: var(--border); }
+    .modal-btn.primary { background: var(--accent); color: #fff; border: none; font-weight: 600; }
+    .modal-btn.primary:hover { background: var(--accent-strong); }
 
     .file-viewer-pre {
-      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
-      padding: .9rem; font-size: .82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
-      font-family: var(--mono);
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+      padding: .85rem; font-size: .82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+      font-family: var(--font-mono);
     }
 
-    /* Rendered markdown inside a response card */
-    .markdown-body { font-size: .89rem; line-height: 1.6; }
+    /* Rendered markdown inside a message body */
+    .markdown-body { font-family: var(--font-sans); font-size: .92rem; line-height: 1.6; color: var(--text); }
     .markdown-body > *:first-child { margin-top: 0; }
     .markdown-body > *:last-child { margin-bottom: 0; }
     .markdown-body h1, .markdown-body h2, .markdown-body h3 {
       font-size: 1em; font-weight: 700; margin: 1.1em 0 .4em; color: var(--text);
     }
-    .markdown-body h1 { font-size: 1.15em; } .markdown-body h2 { font-size: 1.05em; }
-    .markdown-body p { margin: .6em 0; }
+    .markdown-body h1 { font-size: 1.2em; } .markdown-body h2 { font-size: 1.08em; }
+    .markdown-body p { margin: .65em 0; }
     .markdown-body ul, .markdown-body ol { margin: .5em 0; padding-left: 1.4em; }
-    .markdown-body li { margin: .2em 0; }
-    .markdown-body a { color: var(--accent-2); }
+    .markdown-body li { margin: .25em 0; }
+    .markdown-body a { color: var(--accent-strong); }
     .markdown-body strong { color: var(--text); }
     .markdown-body blockquote {
       margin: .6em 0; padding: .1em 1em; border-left: 3px solid var(--border); color: var(--muted);
     }
     .markdown-body code {
-      background: var(--panel-2); border: 1px solid var(--border); padding: .1em .35em;
-      border-radius: 4px; font-size: .9em;
+      background: var(--surface-2); border: 1px solid var(--border); padding: .1em .35em;
+      border-radius: 4px; font-size: .87em; font-family: var(--font-mono);
     }
     .markdown-body pre {
-      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
       padding: .75em .9em; overflow-x: auto; margin: .6em 0;
     }
     .markdown-body pre code { background: none; border: none; padding: 0; font-size: .85em; }
     .markdown-body table { border-collapse: collapse; margin: .6em 0; font-size: .9em; }
     .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: .35em .6em; }
-    .markdown-body th { background: var(--panel-2); }
+    .markdown-body th { background: var(--surface-2); font-family: var(--font-mono); }
     .markdown-body .mermaid {
-      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+      background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
       padding: .75em; margin: .6em 0; display: flex; justify-content: center;
     }
   </style>
@@ -325,22 +370,26 @@
 <body>
   <header>
     <div class="hdr-left">
-      <button class="panel-toggle" id="toggle-left">☰ Projects</button>
-      <h1>manifold-deck</h1>
+      <button class="btn icon-only panel-toggle" id="toggle-left" title="Projects" aria-label="Toggle projects panel">☰</button>
+      <h1><span class="dot">●</span> manifold-deck</h1>
     </div>
-    <div class="hdr-right">
-      <div class="hdr-stats" id="hdr-stats"></div>
-      <button class="icon-btn" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
-      <button class="icon-btn wide" id="import-btn" title="Import Claude Code / Codex CLI history from this machine">Import history</button>
-      <button class="icon-btn wide" id="connections-btn" title="Manage connections">Connections</button>
-      <button class="panel-toggle" id="toggle-right">📁 Files</button>
+    <div class="hdr-stats" id="hdr-stats"></div>
+    <div class="hdr-actions">
+      <button class="btn icon-only" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
+      <button class="btn" id="import-btn" title="Import Claude Code / Codex CLI history from this machine">⇩ Import</button>
+      <button class="btn" id="connections-btn" title="Manage connections">⚙ Connections</button>
+      <button class="btn icon-only panel-toggle" id="toggle-right" title="Files" aria-label="Toggle files panel">📁</button>
     </div>
   </header>
 
   <div class="layout">
     <div class="backdrop" id="backdrop"></div>
     <div class="pane pane-left" id="pane-left">
-      <input id="project-search" placeholder="Search projects…">
+      <div class="section-label">Projects</div>
+      <div class="search-wrap">
+        <span class="search-icon">⌕</span>
+        <input id="project-search" placeholder="Search projects…">
+      </div>
       <div id="project-list"></div>
       <div class="add-project">
         <input id="new-project-cwd" placeholder="/path/to/project">
@@ -350,28 +399,24 @@
     </div>
 
     <div class="pane-center">
-      <div class="thread" id="thread"><div class="thread-inner" id="thread-inner"></div></div>
+      <div class="thread" id="thread"></div>
       <div class="composer">
-        <div class="composer-inner">
-          <div class="composer-box">
-            <textarea id="prompt" placeholder="Ask something — it'll be classified and routed live."></textarea>
-            <div class="composer-row">
-              <button id="send">Send</button>
-              <span class="advanced-toggle" id="advanced-toggle">Advanced</span>
-              <span id="status"></span>
-            </div>
-          </div>
-          <div class="advanced-row" id="advanced-row">
-            <select id="backend-override">
-              <option value="">Auto backend</option>
-            </select>
-            <select id="tier-override">
-              <option value="">Auto tier</option>
-              <option value="SIMPLE">Pin: Simple</option>
-              <option value="MEDIUM">Pin: Medium</option>
-              <option value="COMPLEX">Pin: Complex</option>
-            </select>
-          </div>
+        <textarea id="prompt" placeholder="Ask something — it'll be classified and routed live."></textarea>
+        <div class="composer-row">
+          <button id="send">Send</button>
+          <span class="advanced-toggle" id="advanced-toggle">advanced</span>
+          <span id="status"></span>
+        </div>
+        <div class="advanced-row" id="advanced-row">
+          <select id="backend-override">
+            <option value="">Auto backend</option>
+          </select>
+          <select id="tier-override">
+            <option value="">Auto tier</option>
+            <option value="SIMPLE">Pin: Simple</option>
+            <option value="MEDIUM">Pin: Medium</option>
+            <option value="COMPLEX">Pin: Complex</option>
+          </select>
         </div>
       </div>
     </div>
@@ -484,6 +529,14 @@
 
   function esc(s) { return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function fmtCost(c) { return c ? '$' + c.toFixed(4) : '—'; }
+  function tierVar(tier) {
+    switch ((tier || '').toUpperCase()) {
+      case 'SIMPLE': return 'var(--tier-simple)';
+      case 'MEDIUM': return 'var(--tier-medium)';
+      case 'COMPLEX': return 'var(--tier-complex)';
+      default: return 'var(--tier-null)';
+    }
+  }
 
   function renderMarkdown(text) {
     return marked.parse(text, { breaks: true });
@@ -513,14 +566,14 @@
   function projItemHtml(p) {
     return `
       <div class="proj-item ${p.id === state.activeId ? 'active' : ''}" data-id="${p.id}">
-        <div class="proj-main">
-          <div>${esc(p.name)}</div>
-          <div class="cwd">${esc(p.cwd)}</div>
+        <div class="proj-main" tabindex="0" role="button" aria-label="Select project ${esc(p.name)}">
+          <div class="proj-name">${esc(p.name)}</div>
+          <div class="cwd" title="${esc(p.cwd)}">${esc(p.cwd)}</div>
         </div>
         <div class="proj-actions">
           <button class="proj-star ${p.starred ? 'starred' : ''}" data-id="${p.id}"
-            title="${p.starred ? 'Unstar' : 'Star'}">${p.starred ? '★' : '☆'}</button>
-          <button class="proj-delete" data-id="${p.id}" title="Delete project and its history">🗑</button>
+            title="${p.starred ? 'Unstar' : 'Star'}" aria-label="${p.starred ? 'Unstar' : 'Star'} project ${esc(p.name)}">${p.starred ? '★' : '☆'}</button>
+          <button class="proj-delete" data-id="${p.id}" title="Delete project and its history" aria-label="Delete project ${esc(p.name)}">🗑</button>
         </div>
       </div>`;
   }
@@ -534,23 +587,27 @@
       : state.projects;
     const starred = visible.filter(p => p.starred);
     const rest = visible.filter(p => !p.starred);
+    // The pane's static "Projects" label already covers the whole list —
+    // only the starred subset gets its own label, splitting it out on top.
     let html = '';
     if (starred.length) html += '<div class="section-label">★ Starred</div>' + starred.map(projItemHtml).join('');
-    html += '<div class="section-label">Projects</div>' + rest.map(projItemHtml).join('');
+    if (starred.length && rest.length) html += '<div style="height:.5rem;"></div>';
+    html += rest.map(projItemHtml).join('');
     if (!visible.length) html = '<div class="empty-state">No projects match.</div>';
     document.getElementById('project-list').innerHTML = html;
-    document.querySelectorAll('.proj-item .proj-main').forEach(el =>
-      el.addEventListener('click', () => selectProject(parseInt(el.closest('.proj-item').dataset.id))));
+    document.querySelectorAll('.proj-item .proj-main').forEach(el => {
+      el.addEventListener('click', () => selectProject(parseInt(el.closest('.proj-item').dataset.id)));
+      el.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        selectProject(parseInt(el.closest('.proj-item').dataset.id));
+      });
+    });
     document.querySelectorAll('.proj-delete').forEach(el =>
       el.addEventListener('click', e => { e.stopPropagation(); deleteProject(parseInt(el.dataset.id)); }));
     document.querySelectorAll('.proj-star').forEach(el =>
       el.addEventListener('click', e => { e.stopPropagation(); toggleStar(parseInt(el.dataset.id)); }));
   }
-
-  document.getElementById('project-search').addEventListener('input', e => {
-    state.projectFilter = e.target.value;
-    renderProjectList();
-  });
 
   async function toggleStar(id) {
     const p = state.projects.find(p => p.id === id);
@@ -561,6 +618,11 @@
     });
     await loadProjects();
   }
+
+  document.getElementById('project-search').addEventListener('input', e => {
+    state.projectFilter = e.target.value;
+    renderProjectList();
+  });
 
   async function deleteProject(id) {
     const p = state.projects.find(p => p.id === id);
@@ -602,7 +664,7 @@
       <li class="${n.is_dir ? 'dir' : ''}">
         ${n.is_dir
           ? `📁 ${esc(n.name)}`
-          : `📄 <span class="file-name" data-path="${esc(n.path)}">${esc(n.name)}</span>`}
+          : `📄 <span class="file-name" data-path="${esc(n.path)}" tabindex="0" role="button">${esc(n.name)}</span>`}
         ${n.children ? renderFileNode(n.children) : ''}
       </li>`).join('') + '</ul>';
   }
@@ -635,48 +697,66 @@
   }
 
   function renderThread() {
-    const outer = document.getElementById('thread');
-    const el = document.getElementById('thread-inner');
+    const el = document.getElementById('thread');
     if (!state.turns.length) {
-      el.innerHTML = '<div class="empty-hero"><span class="spark">✳</span><h2>What should we do?</h2>' +
-        '<p>Send a message below — it\'ll be classified by complexity and routed live.</p></div>';
+      el.innerHTML = '<div class="empty-state">No messages yet — send one below.</div>';
       return;
     }
-    let html = '';
+    let html = '<div class="thread-inner">';
     let i = 0;
     while (i < state.turns.length) {
       const t = state.turns[i];
       if (t.role === 'user') {
-        html += `<div class="turn-user"><b>You</b> &middot; ${esc(t.content)}</div>`;
+        html += `
+          <div class="msg-user">
+            <div class="msg-head">You</div>
+            <div class="msg-bubble">${esc(t.content)}</div>
+          </div>`;
         i++;
-        const batch = [];
         while (i < state.turns.length && state.turns[i].role === 'assistant') {
-          batch.push(state.turns[i]); i++;
-        }
-        if (batch.length) {
-          html += '<div class="fanout-row">' + batch.map(b => `
-            <div class="response-card">
-              <div class="response-meta">
-                <span class="tag tag-${b.tier || 'PINNED'}">${b.tier || 'PINNED'}</span>
-                <code>${esc(b.backend)}/${esc(b.model)}</code>
-                <span>${b.latency_ms}ms${b.classify_ms ? ' (+' + b.classify_ms + 'ms routing)' : ''}</span>
-                <span>${fmtCost(b.cost_usd)}</span>
+          const b = state.turns[i];
+          const tierLabel = b.tier || 'PINNED';
+          const backendLabel = b.backend ? `${b.backend}${b.model ? '/' + b.model : ''}` : '—';
+          html += `
+            <div class="msg-assistant">
+              <div class="msg-rail" style="--rail-color: ${tierVar(b.tier)}"></div>
+              <div class="msg-content">
+                <div class="msg-meta">
+                  <span class="pill pill-${tierLabel}">${esc(tierLabel)}</span>
+                  <span class="meta-sep">·</span>
+                  <span class="meta-code">${esc(backendLabel)}</span>
+                  <span class="meta-sep">·</span>
+                  <span>${b.latency_ms != null ? b.latency_ms + 'ms' : '—'}${b.classify_ms ? ' (+' + b.classify_ms + 'ms routing)' : ''}</span>
+                  <span class="meta-sep">·</span>
+                  <span>${fmtCost(b.cost_usd)}</span>
+                </div>
+                <div class="markdown-body">${renderMarkdown(b.content)}</div>
               </div>
-              <div class="markdown-body">${renderMarkdown(b.content)}</div>
-            </div>`).join('') + '</div>';
+            </div>`;
+          i++;
         }
       } else { i++; }
     }
+    html += '</div>';
     el.innerHTML = html;
-    outer.scrollTop = outer.scrollHeight;
+    el.scrollTop = el.scrollHeight;
     renderMermaidBlocks(el);
   }
 
   async function refreshStats() {
     const s = await fetch('/summary').then(r => r.json());
-    const tiers = Object.entries(s.by_tier || {}).map(([t, c]) => `<span class="tag tag-${t}">${t} ${c}</span>`).join(' ');
-    document.getElementById('hdr-stats').innerHTML =
-      `<b>${s.total_requests}</b> requests &middot; <b>$${(s.estimated_cost_usd || 0).toFixed(4)}</b> est. cost &middot; ${tiers}`;
+    const tiers = Object.entries(s.by_tier || {}).map(([t, c]) => {
+      // Same "not classified by the router" bucket as the per-message
+      // fallback below — keep the label identical in both places.
+      const label = t.toLowerCase() === 'null' ? 'PINNED' : t;
+      return `<span class="pill pill-${t}">${esc(label)} ${c}</span>`;
+    }).join('');
+    document.getElementById('hdr-stats').innerHTML = `
+      <span class="stat"><b>${s.total_requests}</b><span class="stat-label">requests</span></span>
+      <span class="divider"></span>
+      <span class="stat"><b>$${(s.estimated_cost_usd || 0).toFixed(4)}</b><span class="stat-label">est. cost</span></span>
+      <span class="divider"></span>
+      <span class="hdr-tiers">${tiers}</span>`;
   }
 
   document.getElementById('advanced-toggle').addEventListener('click', () => {
@@ -693,6 +773,13 @@
   document.getElementById('file-tree').addEventListener('click', e => {
     const el = e.target.closest('.file-name');
     if (el) openFileViewer(el.dataset.path);
+  });
+  document.getElementById('file-tree').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('.file-name');
+    if (!el) return;
+    e.preventDefault();
+    openFileViewer(el.dataset.path);
   });
 
   async function addProject(cwd) {
@@ -714,11 +801,17 @@
     browsePath = data.path;
     document.getElementById('browse-path').textContent = data.path;
     const rows = [];
-    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}">.. (up)</li>`);
-    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}">📁 ${esc(d.name)}</li>`));
+    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}" tabindex="0" role="button">.. (up)</li>`);
+    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}" tabindex="0" role="button">📁 ${esc(d.name)}</li>`));
     document.getElementById('browse-list').innerHTML = rows.join('') || '<li class="up">(no subfolders)</li>';
-    document.querySelectorAll('#browse-list li[data-path]').forEach(el =>
-      el.addEventListener('click', () => loadBrowse(el.dataset.path)));
+    document.querySelectorAll('#browse-list li[data-path]').forEach(el => {
+      el.addEventListener('click', () => loadBrowse(el.dataset.path));
+      el.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        loadBrowse(el.dataset.path);
+      });
+    });
   }
 
   const newFolderToggle = document.getElementById('new-folder-toggle');
@@ -852,7 +945,7 @@
       return `
         <li>
           <div class="conn-info">
-            <div class="conn-name">${esc(c.name)} ${c.is_default ? '<span class="tag tag-SIMPLE">default</span>' : ''}</div>
+            <div class="conn-name">${esc(c.name)} ${c.is_default ? '<span class="pill pill-SIMPLE">default</span>' : ''}</div>
             <div class="conn-meta">${esc(c.provider)} &middot; ${meta}</div>
           </div>
           <div style="display:flex; gap:.3rem; flex-shrink:0;">
