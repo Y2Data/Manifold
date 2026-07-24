@@ -276,6 +276,7 @@
     </div>
     <div class="hdr-stats" id="hdr-stats"></div>
     <button class="modal-btn" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
+    <button class="modal-btn" id="import-btn" title="Import Claude Code / Codex CLI history from this machine">⇩ Import history</button>
     <button class="modal-btn" id="connections-btn" title="Manage connections">⚙ Connections</button>
     <button class="panel-toggle" id="toggle-right">📁 Files</button>
   </header>
@@ -766,6 +767,37 @@
   document.getElementById('connections-btn').addEventListener('click', () => {
     openModal('connections-modal');
     loadConnections();
+  });
+
+  document.getElementById('import-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('import-btn');
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Importing…';
+    try {
+      const res = await fetch('/api/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source: 'all' }),
+      });
+      const body = await res.json().catch(() => null);
+      if (!res.ok) {
+        alert(body?.detail || `Import failed (${res.status})`);
+        return;
+      }
+      alert(
+        `Imported ${body.turns_added} turn(s) from ${body.files_imported} file(s) ` +
+        `(${body.files_scanned} scanned) across ${body.projects_touched.length} project(s).`
+      );
+      await loadProjects();
+      await refreshStats();
+      if (state.activeId) await loadTurns();
+    } catch (err) {
+      alert('Import failed — see console');
+      console.error(err);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
   });
 
   document.getElementById('conn-kind').addEventListener('change', e => {

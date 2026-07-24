@@ -5,7 +5,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.routers import chat, connections, health, projects
+from app.routers import chat, connections, health, imports, projects
 from app.store import get_or_create_project, seed_default_connections
 
 app = FastAPI(title="manifold-deck")
@@ -13,6 +13,7 @@ app.include_router(health.router)
 app.include_router(chat.router)
 app.include_router(projects.router)
 app.include_router(connections.router)
+app.include_router(imports.router)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))

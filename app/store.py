@@ -50,6 +50,16 @@ CREATE TABLE IF NOT EXISTS connections (
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at REAL NOT NULL
 );
+
+-- Tracks which on-disk Claude Code / Codex session files have already been
+-- imported into `turns`, keyed by absolute path, so re-running the importer
+-- only processes new or changed files (mtime mismatch => re-import).
+CREATE TABLE IF NOT EXISTS imported_files (
+    path TEXT PRIMARY KEY,
+    mtime REAL NOT NULL,
+    imported_at REAL NOT NULL,
+    turns_added INTEGER NOT NULL
+);
 """
 
 
@@ -230,6 +240,29 @@ def add_connection(conn_data: dict) -> dict:
 def delete_connection(connection_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM connections WHERE id = ?", (connection_id,))
+
+
+def get_imported_file(path: str) -> dict | None:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM imported_files WHERE path = ?", (path,)).fetchone()
+        return dict(row) if row else None
+
+
+def record_imported_file(path: str, mtime: float, turns_added: int) -> None:
+    now = __import__("time").time()
+    with _connect() as conn:
+        conn.execute(
+            """
+            INSERT INTO imported_files (path, mtime, imported_at, turns_added)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(path) DO UPDATE SET
+                mtime = excluded.mtime,
+                imported_at = excluded.imported_at,
+                turns_added = excluded.turns_added
+            """,
+            (path, mtime, now, turns_added),
+        )
 
 
 def summary() -> dict:
