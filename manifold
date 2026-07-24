@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# manifold-deck's command entrypoint. Usage: ./manifold <bootstrap|up|down|status|dev|test>
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+cmd="${1:-}"
+shift || true
+
+case "$cmd" in
+  bootstrap) exec bash scripts/bootstrap.sh ;;
+  up)        exec bash scripts/up.sh ;;
+  down)      exec bash scripts/down.sh ;;
+  status)    exec bash scripts/status.sh ;;
+  dev)       exec .venv/bin/uvicorn app.main:app --reload --port "${UI_PORT:-8080}" ;;
+  test)      exec .venv/bin/python -m pytest "$@" ;;
+  *)
+    echo "Usage: ./manifold <bootstrap|up|down|status|dev|test>" >&2
+    exit 1
+    ;;
+esac

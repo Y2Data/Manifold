@@ -1,0 +1,611 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>manifold-deck</title>
+  <style>
+    :root {
+      --bg: #0a0b0d; --panel: #15171b; --panel-2: #1c1f24; --border: #262a31;
+      --text: #e8eaed; --muted: #8b93a1; --accent: #6ee7b7; --accent-2: #7c9eff;
+      --simple: #6ee7b7; --medium: #ffcf6e; --complex: #ff8a8a; --pinned: #7c9eff;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+      background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+    }
+    header {
+      display: flex; align-items: center; justify-content: space-between; gap: .75rem;
+      padding: .85rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      flex-wrap: wrap;
+    }
+    .hdr-left { display: flex; align-items: center; gap: .5rem; min-width: 0; }
+    h1 {
+      font-size: 1.15rem; font-weight: 700; letter-spacing: -.02em; margin: 0; white-space: nowrap;
+      background: linear-gradient(90deg, var(--text), var(--muted));
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+    }
+    .hdr-stats { display: flex; gap: .5rem; font-size: .72rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
+    .hdr-stats b { color: var(--text); }
+    .panel-toggle {
+      display: none; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+      border-radius: 8px; padding: .35rem .6rem; font-size: .8rem; cursor: pointer; flex-shrink: 0;
+    }
+    .pill {
+      display: inline-block; padding: .18rem .55rem; border-radius: 999px;
+      font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    }
+    .pill-SIMPLE  { background: color-mix(in srgb, var(--simple) 18%, transparent); color: var(--simple); }
+    .pill-MEDIUM  { background: color-mix(in srgb, var(--medium) 18%, transparent); color: var(--medium); }
+    .pill-COMPLEX { background: color-mix(in srgb, var(--complex) 18%, transparent); color: var(--complex); }
+    .pill-PINNED  { background: color-mix(in srgb, var(--pinned) 18%, transparent); color: var(--pinned); }
+    code { background: var(--bg); border: 1px solid var(--border); padding: .12rem .4rem; border-radius: 5px; font-size: .85em; }
+
+    .layout {
+      flex: 1; display: grid; min-height: 0; position: relative;
+      grid-template-columns: clamp(180px, 18vw, 240px) 1fr clamp(180px, 18vw, 260px);
+    }
+    .pane { overflow-y: auto; }
+    .pane-left { border-right: 1px solid var(--border); padding: .75rem; }
+    .pane-right { border-left: 1px solid var(--border); padding: .75rem; }
+    .pane-center { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
+    .backdrop { display: none; grid-column: 1 / -1; }
+
+    /* Below this width the side panes become slide-in overlays instead of
+       squeezing the center pane into something unusable (fixed-px sidebars
+       otherwise ate the whole viewport on narrow windows). */
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 1fr; }
+      .panel-toggle { display: inline-block; }
+      .pane-left, .pane-right {
+        position: fixed; top: 0; bottom: 0; width: min(80vw, 300px); z-index: 20;
+        background: var(--bg); transition: transform .2s ease; box-shadow: 0 0 40px rgba(0,0,0,.5);
+      }
+      .pane-left { left: 0; transform: translateX(-101%); }
+      .pane-left.open { transform: translateX(0); }
+      .pane-right { right: 0; transform: translateX(101%); }
+      .pane-right.open { transform: translateX(0); }
+      .backdrop {
+        display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 15;
+      }
+      .backdrop.open { display: block; }
+      .fanout-row { flex-direction: column; }
+    }
+
+    .proj-item {
+      padding: .5rem .6rem; border-radius: 8px; cursor: pointer; font-size: .82rem;
+      margin-bottom: .2rem; color: var(--muted);
+    }
+    .proj-item:hover { background: var(--panel-2); }
+    .proj-item.active { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    .proj-item .cwd { font-size: .68rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .section-label {
+      font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
+      margin: .75rem 0 .4rem; font-weight: 600;
+    }
+    .add-project { display: flex; gap: .3rem; margin-top: .5rem; }
+    .add-project input {
+      flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: .4rem .5rem; font-size: .75rem;
+    }
+    .add-project button {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: .4rem .6rem; font-size: .75rem; cursor: pointer;
+    }
+
+    .thread { flex: 1; overflow-y: auto; padding: 1.25rem; }
+    .turn-user { color: var(--muted); font-size: .85rem; margin: 1.25rem 0 .5rem; }
+    .turn-user b { color: var(--text); font-weight: 600; }
+    .fanout-row { display: flex; gap: .75rem; }
+    .response-card {
+      flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--border);
+      border-radius: 10px; padding: .85rem;
+    }
+    .response-meta {
+      display: flex; gap: .5rem; align-items: center; font-size: .7rem; color: var(--muted);
+      margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .03em;
+    }
+    .empty-state { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 3rem; }
+
+    .composer { border-top: 1px solid var(--border); padding: 1rem 1.25rem; flex-shrink: 0; }
+    .composer textarea {
+      width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+      border-radius: 10px; padding: .7rem .85rem; font-family: inherit; font-size: .92rem;
+      resize: vertical; min-height: 4rem;
+    }
+    .composer textarea:focus { outline: none; border-color: var(--accent-2); }
+    .composer-row { display: flex; gap: .6rem; align-items: center; margin-top: .6rem; }
+    .composer button#send {
+      background: linear-gradient(180deg, var(--accent), #4ec99a); color: #06251b;
+      border: none; border-radius: 8px; padding: .5rem 1.1rem; font-size: .85rem;
+      font-weight: 700; cursor: pointer;
+    }
+    .composer button#send:disabled { opacity: .45; cursor: default; }
+    .advanced-toggle { font-size: .75rem; color: var(--muted); cursor: pointer; text-decoration: underline; }
+    .advanced-row { display: none; gap: .5rem; margin-top: .5rem; }
+    .advanced-row.open { display: flex; }
+    .advanced-row select {
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: .4rem .6rem; font-size: .78rem;
+    }
+    #status { color: var(--muted); font-size: .78rem; margin-left: .3rem; }
+
+    .file-tree { font-size: .78rem; }
+    .file-tree ul { list-style: none; margin: 0; padding-left: 1rem; }
+    .file-tree > ul { padding-left: 0; }
+    .file-tree li { padding: .1rem 0; color: var(--muted); white-space: nowrap; }
+    .file-tree .dir { color: var(--text); font-weight: 600; }
+    .file-tree .file-name { cursor: pointer; }
+    .file-tree .file-name:hover { color: var(--text); text-decoration: underline; }
+
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      z-index: 50; align-items: center; justify-content: center; padding: 2rem;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal-box {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column;
+      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+      padding: .85rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+    }
+    .modal-header .title { font-size: .85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .modal-close {
+      background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; line-height: 1; flex-shrink: 0;
+    }
+    .modal-close:hover { color: var(--text); }
+    .modal-body { padding: 1rem; overflow-y: auto; }
+    .modal-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: .5rem; flex-shrink: 0; }
+
+    .new-folder-row { display: flex; gap: .4rem; margin-bottom: .6rem; align-items: center; }
+    .new-folder-row input {
+      flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: .4rem .5rem; font-size: .8rem;
+    }
+    .browse-list { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
+    .browse-list li {
+      padding: .45rem .5rem; border-radius: 6px; cursor: pointer; color: var(--text);
+    }
+    .browse-list li:hover { background: var(--panel-2); }
+    .browse-list li.up { color: var(--muted); }
+    .modal-btn {
+      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: .45rem .9rem; font-size: .82rem; cursor: pointer;
+    }
+    .modal-btn.primary { background: linear-gradient(180deg, var(--accent), #4ec99a); color: #06251b; border: none; font-weight: 700; }
+
+    .file-viewer-pre {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: .85rem; font-size: .82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+    }
+
+    /* Rendered markdown inside a response card */
+    .markdown-body { font-size: .87rem; line-height: 1.55; }
+    .markdown-body > *:first-child { margin-top: 0; }
+    .markdown-body > *:last-child { margin-bottom: 0; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 {
+      font-size: 1em; font-weight: 700; margin: 1.1em 0 .4em; color: var(--text);
+    }
+    .markdown-body h1 { font-size: 1.15em; } .markdown-body h2 { font-size: 1.05em; }
+    .markdown-body p { margin: .6em 0; }
+    .markdown-body ul, .markdown-body ol { margin: .5em 0; padding-left: 1.4em; }
+    .markdown-body li { margin: .2em 0; }
+    .markdown-body a { color: var(--accent-2); }
+    .markdown-body strong { color: var(--text); }
+    .markdown-body blockquote {
+      margin: .6em 0; padding: .1em 1em; border-left: 3px solid var(--border); color: var(--muted);
+    }
+    .markdown-body code {
+      background: var(--bg); border: 1px solid var(--border); padding: .1em .35em;
+      border-radius: 4px; font-size: .9em;
+    }
+    .markdown-body pre {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: .75em .9em; overflow-x: auto; margin: .6em 0;
+    }
+    .markdown-body pre code { background: none; border: none; padding: 0; font-size: .85em; }
+    .markdown-body table { border-collapse: collapse; margin: .6em 0; font-size: .9em; }
+    .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: .35em .6em; }
+    .markdown-body th { background: var(--panel-2); }
+    .markdown-body .mermaid {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      padding: .75em; margin: .6em 0; display: flex; justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hdr-left">
+      <button class="panel-toggle" id="toggle-left">☰ Projects</button>
+      <h1>manifold-deck</h1>
+    </div>
+    <div class="hdr-stats" id="hdr-stats"></div>
+    <button class="panel-toggle" id="toggle-right">📁 Files</button>
+  </header>
+
+  <div class="layout">
+    <div class="backdrop" id="backdrop"></div>
+    <div class="pane pane-left" id="pane-left">
+      <div class="section-label">Projects</div>
+      <div id="project-list"></div>
+      <div class="add-project">
+        <input id="new-project-cwd" placeholder="/path/to/project">
+        <button id="browse-btn" title="Browse folders">Select</button>
+        <button id="add-project-btn">+</button>
+      </div>
+    </div>
+
+    <div class="pane-center">
+      <div class="thread" id="thread"></div>
+      <div class="composer">
+        <textarea id="prompt" placeholder="Ask something — it'll be classified and routed live."></textarea>
+        <div class="composer-row">
+          <button id="send">Send</button>
+          <span class="advanced-toggle" id="advanced-toggle">advanced</span>
+          <span id="status"></span>
+        </div>
+        <div class="advanced-row" id="advanced-row">
+          <select id="backend-override">
+            <option value="">Auto backend</option>
+            <option value="claude">Force: Claude</option>
+            <option value="codex">Force: Codex</option>
+            <option value="both">Force: Both</option>
+          </select>
+          <select id="tier-override">
+            <option value="">Auto tier</option>
+            <option value="SIMPLE">Pin: Simple</option>
+            <option value="MEDIUM">Pin: Medium</option>
+            <option value="COMPLEX">Pin: Complex</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="pane pane-right" id="pane-right">
+      <div class="section-label">Files</div>
+      <div class="file-tree" id="file-tree"></div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="browse-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="title" id="browse-path"></span>
+        <button class="modal-close" data-close="browse-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="new-folder-row" id="new-folder-row">
+          <button class="modal-btn" id="new-folder-toggle">+ New Folder</button>
+          <input id="new-folder-name" placeholder="folder name" style="display:none;">
+          <button class="modal-btn" id="new-folder-confirm" style="display:none;">Create</button>
+        </div>
+        <ul class="browse-list" id="browse-list"></ul>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn" data-close="browse-modal">Cancel</button>
+        <button class="modal-btn primary" id="browse-select-btn">Select This Folder</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="file-modal">
+    <div class="modal-box" style="width: min(800px, 100%);">
+      <div class="modal-header">
+        <span class="title" id="file-modal-title"></span>
+        <button class="modal-close" data-close="file-modal">&times;</button>
+      </div>
+      <div class="modal-body" id="file-modal-body"></div>
+    </div>
+  </div>
+
+<script src="/static/marked.min.js"></script>
+<script src="/static/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+  const state = { projects: [], activeId: null, turns: [] };
+
+  function esc(s) { return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+  function fmtCost(c) { return c ? '$' + c.toFixed(4) : '—'; }
+
+  function renderMarkdown(text) {
+    return marked.parse(text, { breaks: true });
+  }
+
+  async function renderMermaidBlocks(container) {
+    const blocks = container.querySelectorAll('code.language-mermaid');
+    for (const code of blocks) {
+      const pre = code.closest('pre');
+      const div = document.createElement('div');
+      div.className = 'mermaid';
+      div.textContent = code.textContent;
+      pre.replaceWith(div);
+    }
+    const nodes = container.querySelectorAll('.mermaid');
+    if (nodes.length) {
+      try { await mermaid.run({ nodes }); } catch (err) { console.error('mermaid render failed', err); }
+    }
+  }
+
+  async function loadProjects() {
+    state.projects = await fetch('/api/projects').then(r => r.json());
+    if (!state.activeId && state.projects.length) state.activeId = state.projects[0].id;
+    renderProjectList();
+  }
+
+  function renderProjectList() {
+    document.getElementById('project-list').innerHTML = state.projects.map(p => `
+      <div class="proj-item ${p.id === state.activeId ? 'active' : ''}" data-id="${p.id}">
+        <div>${esc(p.name)}</div>
+        <div class="cwd">${esc(p.cwd)}</div>
+      </div>`).join('');
+    document.querySelectorAll('.proj-item').forEach(el =>
+      el.addEventListener('click', () => selectProject(parseInt(el.dataset.id))));
+  }
+
+  async function selectProject(id) {
+    state.activeId = id;
+    renderProjectList();
+    closePanels();
+    await Promise.all([loadTurns(), loadFiles()]);
+  }
+
+  async function loadTurns() {
+    if (!state.activeId) return;
+    state.turns = await fetch(`/api/projects/${state.activeId}/turns`).then(r => r.json());
+    renderThread();
+  }
+
+  async function loadFiles() {
+    if (!state.activeId) return;
+    const data = await fetch(`/api/projects/${state.activeId}/files`).then(r => r.json());
+    document.getElementById('file-tree').innerHTML = renderFileNode(data.tree);
+  }
+
+  function renderFileNode(nodes) {
+    if (!nodes || !nodes.length) return '<ul><li>(empty)</li></ul>';
+    return '<ul>' + nodes.map(n => `
+      <li class="${n.is_dir ? 'dir' : ''}">
+        ${n.is_dir
+          ? `📁 ${esc(n.name)}`
+          : `📄 <span class="file-name" data-path="${esc(n.path)}">${esc(n.name)}</span>`}
+        ${n.children ? renderFileNode(n.children) : ''}
+      </li>`).join('') + '</ul>';
+  }
+
+  async function openFileViewer(path) {
+    const modal = document.getElementById('file-modal');
+    const titleEl = document.getElementById('file-modal-title');
+    const bodyEl = document.getElementById('file-modal-body');
+    titleEl.textContent = path;
+    bodyEl.innerHTML = '<div class="empty-state">Loading…</div>';
+    openModal('file-modal');
+    try {
+      const res = await fetch(`/api/projects/${state.activeId}/file?path=${encodeURIComponent(path)}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        bodyEl.innerHTML = `<div class="empty-state">${esc(body?.detail || 'Could not load file')}</div>`;
+        return;
+      }
+      const data = await res.json();
+      if (data.is_markdown) {
+        bodyEl.innerHTML = `<div class="markdown-body">${renderMarkdown(data.content)}</div>`;
+        renderMermaidBlocks(bodyEl);
+      } else {
+        bodyEl.innerHTML = `<pre class="file-viewer-pre">${esc(data.content)}</pre>`;
+      }
+    } catch (err) {
+      bodyEl.innerHTML = '<div class="empty-state">Failed to load file — see console</div>';
+      console.error(err);
+    }
+  }
+
+  function renderThread() {
+    const el = document.getElementById('thread');
+    if (!state.turns.length) {
+      el.innerHTML = '<div class="empty-state">No messages yet — send one below.</div>';
+      return;
+    }
+    let html = '';
+    let i = 0;
+    while (i < state.turns.length) {
+      const t = state.turns[i];
+      if (t.role === 'user') {
+        html += `<div class="turn-user"><b>You</b> &middot; ${esc(t.content)}</div>`;
+        i++;
+        const batch = [];
+        while (i < state.turns.length && state.turns[i].role === 'assistant') {
+          batch.push(state.turns[i]); i++;
+        }
+        if (batch.length) {
+          html += '<div class="fanout-row">' + batch.map(b => `
+            <div class="response-card">
+              <div class="response-meta">
+                <span class="pill pill-${b.tier || 'PINNED'}">${b.tier || 'PINNED'}</span>
+                <code>${esc(b.backend)}/${esc(b.model)}</code>
+                <span>${b.latency_ms}ms${b.classify_ms ? ' (+' + b.classify_ms + 'ms routing)' : ''}</span>
+                <span>${fmtCost(b.cost_usd)}</span>
+              </div>
+              <div class="markdown-body">${renderMarkdown(b.content)}</div>
+            </div>`).join('') + '</div>';
+        }
+      } else { i++; }
+    }
+    el.innerHTML = html;
+    el.scrollTop = el.scrollHeight;
+    renderMermaidBlocks(el);
+  }
+
+  async function refreshStats() {
+    const s = await fetch('/summary').then(r => r.json());
+    const tiers = Object.entries(s.by_tier || {}).map(([t, c]) => `<span class="pill pill-${t}">${t} ${c}</span>`).join(' ');
+    document.getElementById('hdr-stats').innerHTML =
+      `<b>${s.total_requests}</b> requests &middot; <b>$${(s.estimated_cost_usd || 0).toFixed(4)}</b> est. cost &middot; ${tiers}`;
+  }
+
+  document.getElementById('advanced-toggle').addEventListener('click', () => {
+    document.getElementById('advanced-row').classList.toggle('open');
+  });
+
+  function openModal(id) { document.getElementById(id).classList.add('open'); }
+  function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+  document.querySelectorAll('[data-close]').forEach(el =>
+    el.addEventListener('click', () => closeModal(el.dataset.close)));
+  document.querySelectorAll('.modal-overlay').forEach(el =>
+    el.addEventListener('click', e => { if (e.target === el) closeModal(el.id); }));
+
+  document.getElementById('file-tree').addEventListener('click', e => {
+    const el = e.target.closest('.file-name');
+    if (el) openFileViewer(el.dataset.path);
+  });
+
+  async function addProject(cwd) {
+    const res = await fetch('/api/projects', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cwd }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      alert(body?.detail || `Failed to add project (${res.status})`);
+      return null;
+    }
+    return res.json();
+  }
+
+  let browsePath = null;
+  async function loadBrowse(path) {
+    const data = await fetch(`/api/projects/browse${path ? '?path=' + encodeURIComponent(path) : ''}`).then(r => r.json());
+    browsePath = data.path;
+    document.getElementById('browse-path').textContent = data.path;
+    const rows = [];
+    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}">.. (up)</li>`);
+    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}">📁 ${esc(d.name)}</li>`));
+    document.getElementById('browse-list').innerHTML = rows.join('') || '<li class="up">(no subfolders)</li>';
+    document.querySelectorAll('#browse-list li[data-path]').forEach(el =>
+      el.addEventListener('click', () => loadBrowse(el.dataset.path)));
+  }
+
+  const newFolderToggle = document.getElementById('new-folder-toggle');
+  const newFolderName = document.getElementById('new-folder-name');
+  const newFolderConfirm = document.getElementById('new-folder-confirm');
+
+  document.getElementById('browse-btn').addEventListener('click', () => {
+    const typed = document.getElementById('new-project-cwd').value.trim();
+    newFolderToggle.style.display = '';
+    newFolderName.style.display = 'none';
+    newFolderConfirm.style.display = 'none';
+    openModal('browse-modal');
+    loadBrowse(typed || null);
+  });
+
+  newFolderToggle.addEventListener('click', () => {
+    newFolderToggle.style.display = 'none';
+    newFolderName.style.display = '';
+    newFolderConfirm.style.display = '';
+    newFolderName.value = '';
+    newFolderName.focus();
+  });
+
+  async function createFolder() {
+    const name = newFolderName.value.trim();
+    if (!name) return;
+    const res = await fetch('/api/projects/browse/mkdir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ parent: browsePath, name }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      alert(body?.detail || `Failed to create folder (${res.status})`);
+      return;
+    }
+    const folder = await res.json();
+    newFolderToggle.style.display = '';
+    newFolderName.style.display = 'none';
+    newFolderConfirm.style.display = 'none';
+    await loadBrowse(folder.path);  // land inside the new folder, ready to Select
+  }
+  newFolderConfirm.addEventListener('click', createFolder);
+  newFolderName.addEventListener('keydown', e => { if (e.key === 'Enter') createFolder(); });
+
+  document.getElementById('browse-select-btn').addEventListener('click', async () => {
+    closeModal('browse-modal');
+    const project = await addProject(browsePath);
+    if (!project) return;
+    document.getElementById('new-project-cwd').value = '';
+    await loadProjects();
+    await selectProject(project.id);
+  });
+
+  const paneLeft = document.getElementById('pane-left');
+  const paneRight = document.getElementById('pane-right');
+  const backdrop = document.getElementById('backdrop');
+
+  function closePanels() {
+    paneLeft.classList.remove('open');
+    paneRight.classList.remove('open');
+    backdrop.classList.remove('open');
+  }
+  function openPanel(pane) {
+    closePanels();
+    pane.classList.add('open');
+    backdrop.classList.add('open');
+  }
+  document.getElementById('toggle-left').addEventListener('click', () => openPanel(paneLeft));
+  document.getElementById('toggle-right').addEventListener('click', () => openPanel(paneRight));
+  backdrop.addEventListener('click', closePanels);
+
+  document.getElementById('add-project-btn').addEventListener('click', async () => {
+    const cwdEl = document.getElementById('new-project-cwd');
+    const cwd = cwdEl.value.trim();
+    if (!cwd) return;
+    const project = await addProject(cwd);
+    if (!project) return;
+    cwdEl.value = '';
+    await loadProjects();
+    await selectProject(project.id);
+  });
+
+  document.getElementById('send').addEventListener('click', async () => {
+    const promptEl = document.getElementById('prompt');
+    const statusEl = document.getElementById('status');
+    const sendBtn = document.getElementById('send');
+    const backend = document.getElementById('backend-override').value || null;
+    const tier = document.getElementById('tier-override').value || null;
+    const prompt = promptEl.value.trim();
+    if (!prompt || !state.activeId) return;
+
+    sendBtn.disabled = true;
+    statusEl.textContent = 'routing…';
+    try {
+      const res = await fetch('/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: state.activeId, backend, tier,
+          messages: [{ role: 'user', content: prompt }],
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      promptEl.value = '';
+      statusEl.textContent = '';
+      await Promise.all([loadTurns(), refreshStats()]);
+    } catch (err) {
+      statusEl.textContent = 'error — see console';
+      console.error(err);
+    } finally {
+      sendBtn.disabled = false;
+    }
+  });
+
+  (async function init() {
+    await loadProjects();
+    if (state.activeId) await Promise.all([loadTurns(), loadFiles()]);
+    await refreshStats();
+  })();
+</script>
+</body>
+</html>
