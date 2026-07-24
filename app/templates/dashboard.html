@@ -766,8 +766,8 @@
     browsePath = data.path;
     document.getElementById('browse-path').textContent = data.path;
     const rows = [];
-    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}" tabindex="0" role="option">.. (up)</li>`);
-    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}" tabindex="0" role="option">📁 ${esc(d.name)}</li>`));
+    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}" tabindex="0" role="button">.. (up)</li>`);
+    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}" tabindex="0" role="button">📁 ${esc(d.name)}</li>`));
     document.getElementById('browse-list').innerHTML = rows.join('') || '<li class="up">(no subfolders)</li>';
     document.querySelectorAll('#browse-list li[data-path]').forEach(el => {
       el.addEventListener('click', () => loadBrowse(el.dataset.path));
