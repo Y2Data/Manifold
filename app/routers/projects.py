@@ -13,6 +13,7 @@ from app.store import (
     get_project,
     get_project_turns,
     list_projects,
+    set_project_starred,
 )
 
 router = APIRouter(prefix="/api/projects")
@@ -25,6 +26,10 @@ class NewProject(BaseModel):
 class NewFolder(BaseModel):
     parent: str
     name: str
+
+
+class StarUpdate(BaseModel):
+    starred: bool
 
 
 @router.get("")
@@ -84,6 +89,13 @@ async def api_delete_project(project_id: int):
         raise HTTPException(404, "project not found")
     delete_project(project_id)
     return {"deleted": project_id}
+
+
+@router.post("/{project_id}/star")
+async def api_star_project(project_id: int, body: StarUpdate):
+    if get_project(project_id) is None:
+        raise HTTPException(404, "project not found")
+    return set_project_starred(project_id, body.starred)
 
 
 @router.get("/{project_id}/turns")

@@ -31,6 +31,7 @@ from app.store import (
     get_project,
     get_project_turns,
     list_default_connections,
+    touch_project,
 )
 
 _CLAUDE_TIER_MODEL = {
@@ -94,6 +95,7 @@ async def route(
     context_prompt = _build_context(project_id, prompt)
     project = get_project(project_id)
     project_cwd = project["cwd"] if project else None
+    touch_project(project_id)
 
     add_turn(
         {

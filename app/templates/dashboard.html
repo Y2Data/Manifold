@@ -15,71 +15,85 @@
   </script>
   <style>
     :root {
-      --bg: #0a0b0d; --panel: #15171b; --panel-2: #1c1f24; --border: #262a31;
-      --text: #e8eaed; --muted: #8b93a1; --accent: #6ee7b7; --accent-2: #7c9eff;
-      --simple: #6ee7b7; --medium: #ffcf6e; --complex: #ff8a8a; --pinned: #7c9eff;
-      --shadow: rgba(0,0,0,.5); --overlay: rgba(0,0,0,.6);
+      --bg: #1b1b1a; --panel: #232322; --panel-2: #2c2c2a; --border: #3a3a37;
+      --text: #ececea; --muted: #9c9a94; --accent: #e2536b; --accent-2: #6d8fe0;
+      --simple: #4fae80; --medium: #d9a341; --complex: #e0637e; --pinned: #6d8fe0;
+      --on-accent: #fff; --shadow: rgba(0,0,0,.45); --overlay: rgba(10,10,10,.6);
+      --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+      --sans: -apple-system, "SF Pro Text", system-ui, sans-serif;
       color-scheme: dark;
     }
     /* System preference is the default; an explicit data-theme (the header
        toggle, persisted in localStorage) always wins over it. */
     @media (prefers-color-scheme: light) {
       :root:not([data-theme="dark"]) {
-        --bg: #f7f8fa; --panel: #ffffff; --panel-2: #eef0f3; --border: #dfe3e8;
-        --text: #1a1d21; --muted: #667085; --accent: #0e9f6e; --accent-2: #3b6fe0;
-        --simple: #0e9f6e; --medium: #b45309; --complex: #dc2626; --pinned: #3b6fe0;
-        --shadow: rgba(20,25,35,.08); --overlay: rgba(15,18,22,.4);
+        --bg: #faf8f6; --panel: #ffffff; --panel-2: #f2efe9; --border: #e7e2d9;
+        --text: #211f1c; --muted: #837d72; --accent: #d94a63; --accent-2: #4a6fd0;
+        --simple: #2f8f66; --medium: #ab7213; --complex: #c23e58; --pinned: #4a6fd0;
+        --on-accent: #fff; --shadow: rgba(40,35,20,.08); --overlay: rgba(30,26,18,.35);
         color-scheme: light;
       }
     }
     :root[data-theme="light"] {
-      --bg: #f7f8fa; --panel: #ffffff; --panel-2: #eef0f3; --border: #dfe3e8;
-      --text: #1a1d21; --muted: #667085; --accent: #0e9f6e; --accent-2: #3b6fe0;
-      --simple: #0e9f6e; --medium: #b45309; --complex: #dc2626; --pinned: #3b6fe0;
-      --shadow: rgba(20,25,35,.08); --overlay: rgba(15,18,22,.4);
+      --bg: #faf8f6; --panel: #ffffff; --panel-2: #f2efe9; --border: #e7e2d9;
+      --text: #211f1c; --muted: #837d72; --accent: #d94a63; --accent-2: #4a6fd0;
+      --simple: #2f8f66; --medium: #ab7213; --complex: #c23e58; --pinned: #4a6fd0;
+      --on-accent: #fff; --shadow: rgba(40,35,20,.08); --overlay: rgba(30,26,18,.35);
       color-scheme: light;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
-      font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+      font-family: var(--sans);
       background: var(--bg); color: var(--text); display: flex; flex-direction: column;
       transition: background-color .15s ease, color .15s ease;
     }
     header {
       display: flex; align-items: center; justify-content: space-between; gap: .75rem;
-      padding: .85rem 1.25rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      padding: .8rem 1.1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
       flex-wrap: wrap;
     }
     .hdr-left { display: flex; align-items: center; gap: .5rem; min-width: 0; }
     h1 {
-      font-size: 1.15rem; font-weight: 700; letter-spacing: -.02em; margin: 0; white-space: nowrap;
-      background: linear-gradient(90deg, var(--text), var(--muted));
-      -webkit-background-clip: text; background-clip: text; color: transparent;
+      font-size: 1rem; font-weight: 700; letter-spacing: -.01em;
+      margin: 0; white-space: nowrap; color: var(--text);
     }
-    .hdr-stats { display: flex; gap: .5rem; font-size: .72rem; color: var(--muted); flex-wrap: wrap; align-items: center; }
-    .hdr-stats b { color: var(--text); }
+    .hdr-right { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; flex-wrap: wrap; }
+    .hdr-stats {
+      display: flex; gap: .55rem; font-size: .74rem; color: var(--muted); flex-wrap: wrap; align-items: center;
+    }
+    .hdr-stats b { color: var(--text); font-weight: 600; }
     .panel-toggle {
-      display: none; background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
-      border-radius: 8px; padding: .35rem .6rem; font-size: .8rem; cursor: pointer; flex-shrink: 0;
+      display: none; background: none; border: none; color: var(--text);
+      border-radius: 8px; padding: .35rem .5rem; font-size: .82rem; cursor: pointer; flex-shrink: 0;
     }
-    .pill {
-      display: inline-block; padding: .18rem .55rem; border-radius: 999px;
-      font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .03em;
+    .icon-btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
+      background: none; border: none; color: var(--muted);
+      border-radius: 999px; width: 2rem; height: 2rem; font-size: .95rem; cursor: pointer;
     }
-    .pill-SIMPLE  { background: color-mix(in srgb, var(--simple) 18%, transparent); color: var(--simple); }
-    .pill-MEDIUM  { background: color-mix(in srgb, var(--medium) 18%, transparent); color: var(--medium); }
-    .pill-COMPLEX { background: color-mix(in srgb, var(--complex) 18%, transparent); color: var(--complex); }
-    .pill-PINNED  { background: color-mix(in srgb, var(--pinned) 18%, transparent); color: var(--pinned); }
-    code { background: var(--bg); border: 1px solid var(--border); padding: .12rem .4rem; border-radius: 5px; font-size: .85em; }
+    .icon-btn:hover { background: var(--panel-2); color: var(--text); }
+    .icon-btn.wide { width: auto; padding: 0 .8rem; font-size: .8rem; font-weight: 500; }
+    .tag {
+      display: inline-flex; align-items: center; padding: .16rem .55rem; border-radius: 999px;
+      font-size: .7rem; font-weight: 600;
+    }
+    .tag-SIMPLE  { background: color-mix(in srgb, var(--simple) 16%, transparent); color: var(--simple); }
+    .tag-MEDIUM  { background: color-mix(in srgb, var(--medium) 16%, transparent); color: var(--medium); }
+    .tag-COMPLEX { background: color-mix(in srgb, var(--complex) 16%, transparent); color: var(--complex); }
+    .tag-PINNED, .tag-null { background: color-mix(in srgb, var(--pinned) 16%, transparent); color: var(--pinned); }
+    code {
+      background: var(--panel-2); padding: .12rem .4rem; border-radius: 5px;
+      font-size: .85em; font-family: var(--mono);
+    }
 
     .layout {
       flex: 1; display: grid; min-height: 0; position: relative;
-      grid-template-columns: clamp(180px, 18vw, 240px) 1fr clamp(180px, 18vw, 260px);
+      grid-template-columns: clamp(200px, 19vw, 260px) 1fr clamp(180px, 18vw, 260px);
     }
     .pane { overflow-y: auto; }
-    .pane-left { border-right: 1px solid var(--border); padding: .75rem; }
-    .pane-right { border-left: 1px solid var(--border); padding: .75rem; }
+    .pane-left { border-right: 1px solid var(--border); padding: .9rem; }
+    .pane-right { border-left: 1px solid var(--border); padding: .9rem; }
     .pane-center { display: flex; flex-direction: column; min-height: 0; min-width: 0; }
     .backdrop { display: none; grid-column: 1 / -1; }
 
@@ -105,78 +119,103 @@
     }
 
     .proj-item {
-      padding: .5rem .6rem; border-radius: 8px; cursor: pointer; font-size: .82rem;
-      margin-bottom: .2rem; color: var(--muted);
-      display: flex; align-items: center; justify-content: space-between; gap: .4rem;
+      padding: .55rem .6rem; border-radius: 10px; cursor: pointer; font-size: .85rem;
+      margin-bottom: .1rem; color: var(--text);
+      display: flex; align-items: center; justify-content: space-between; gap: .3rem;
     }
     .proj-item:hover { background: var(--panel-2); }
-    .proj-item.active { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    .proj-item.active { background: var(--panel-2); }
     .proj-item .proj-main { min-width: 0; flex: 1; }
-    .proj-item .cwd { font-size: .68rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .proj-item .proj-delete {
+    .proj-item .cwd {
+      font-size: .72rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .proj-item .proj-actions { flex-shrink: 0; display: flex; gap: 0; opacity: 0; transition: opacity .1s; }
+    .proj-item:hover .proj-actions, .proj-item.active .proj-actions { opacity: 1; }
+    .proj-item .proj-star.starred { opacity: 1; }
+    .proj-item .proj-star, .proj-item .proj-delete {
       flex-shrink: 0; background: none; border: none; color: var(--muted); cursor: pointer;
-      font-size: .8rem; padding: .1rem .3rem; border-radius: 4px; line-height: 1;
+      font-size: .82rem; padding: .2rem .35rem; border-radius: 6px; line-height: 1;
     }
-    .proj-item .proj-delete:hover { background: var(--panel); color: var(--text); }
+    .proj-item .proj-star:hover, .proj-item .proj-delete:hover { background: var(--border); color: var(--text); }
+    .proj-item .proj-star.starred { color: var(--medium); }
     #project-search {
-      width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border);
-      border-radius: 8px; padding: .4rem .6rem; font-size: .8rem; margin-bottom: .5rem;
+      width: 100%; background: var(--panel-2); color: var(--text); border: 1px solid transparent;
+      border-radius: 10px; padding: .5rem .7rem; font-size: .82rem; margin-bottom: .6rem;
     }
+    #project-search:focus { outline: none; border-color: var(--border); }
     .section-label {
-      font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
-      margin: .75rem 0 .4rem; font-weight: 600;
+      font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em;
+      margin: 1rem 0 .35rem; font-weight: 600; padding: 0 .6rem;
     }
-    .add-project { display: flex; gap: .3rem; margin-top: .5rem; }
+    .section-label:first-child { margin-top: 0; }
+    .add-project { display: flex; gap: .35rem; margin-top: .6rem; }
     .add-project input {
-      flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--border);
-      border-radius: 6px; padding: .4rem .5rem; font-size: .75rem;
+      flex: 1; min-width: 0; background: var(--panel-2); color: var(--text); border: 1px solid transparent;
+      border-radius: 8px; padding: .45rem .55rem; font-size: .78rem;
     }
+    .add-project input:focus { outline: none; border-color: var(--border); }
     .add-project button {
-      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-      border-radius: 6px; padding: .4rem .6rem; font-size: .75rem; cursor: pointer;
+      background: var(--panel-2); color: var(--text); border: none;
+      border-radius: 8px; padding: .45rem .7rem; font-size: .78rem; cursor: pointer;
     }
+    .add-project button:hover { background: var(--border); }
 
-    .thread { flex: 1; overflow-y: auto; padding: 1.25rem; }
-    .turn-user { color: var(--muted); font-size: .85rem; margin: 1.25rem 0 .5rem; }
+    .thread { flex: 1; overflow-y: auto; padding: 1.5rem; }
+    .thread-inner { max-width: 760px; margin: 0 auto; }
+    .empty-hero {
+      max-width: 480px; margin: 10vh auto 0; text-align: center; color: var(--muted); font-size: .92rem;
+    }
+    .empty-hero .spark { font-size: 1.8rem; display: block; margin-bottom: .6rem; }
+    .empty-hero h2 { font-size: 1.3rem; color: var(--text); font-weight: 600; margin: 0 0 .4rem; }
+    .turn-user {
+      color: var(--muted); font-size: .82rem; margin: 1.5rem 0 .6rem; max-width: 760px;
+    }
+    .turn-user:first-child { margin-top: 0; }
     .turn-user b { color: var(--text); font-weight: 600; }
-    .fanout-row { display: flex; gap: .75rem; }
+    .fanout-row { display: flex; gap: .7rem; max-width: 760px; }
     .response-card {
       flex: 1; min-width: 0; background: var(--panel); border: 1px solid var(--border);
-      border-radius: 10px; padding: .85rem;
+      border-radius: 14px; padding: 1rem;
     }
     .response-meta {
-      display: flex; gap: .5rem; align-items: center; font-size: .7rem; color: var(--muted);
-      margin-bottom: .5rem; text-transform: uppercase; letter-spacing: .03em;
+      display: flex; gap: .5rem; align-items: center; font-size: .72rem; color: var(--muted);
+      margin-bottom: .6rem; flex-wrap: wrap;
     }
+    .response-meta code { font-size: .82em; }
     .empty-state { color: var(--muted); font-size: .85rem; text-align: center; margin-top: 3rem; }
 
-    .composer { border-top: 1px solid var(--border); padding: 1rem 1.25rem; flex-shrink: 0; }
+    .composer { padding: 1rem 1.5rem 1.4rem; flex-shrink: 0; }
+    .composer-inner { max-width: 760px; margin: 0 auto; }
+    .composer-box {
+      background: var(--panel); border: 1px solid var(--border); border-radius: 20px; padding: .7rem .9rem .6rem;
+    }
     .composer textarea {
-      width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border);
-      border-radius: 10px; padding: .7rem .85rem; font-family: inherit; font-size: .92rem;
-      resize: vertical; min-height: 4rem;
+      width: 100%; background: none; color: var(--text); border: none;
+      padding: .2rem 0; font-family: inherit; font-size: .92rem;
+      resize: vertical; min-height: 2.6rem; display: block;
     }
-    .composer textarea:focus { outline: none; border-color: var(--accent-2); }
-    .composer-row { display: flex; gap: .6rem; align-items: center; margin-top: .6rem; }
+    .composer textarea:focus { outline: none; }
+    .composer-row { display: flex; gap: .6rem; align-items: center; margin-top: .5rem; }
     .composer button#send {
-      background: linear-gradient(180deg, var(--accent), #4ec99a); color: #06251b;
-      border: none; border-radius: 8px; padding: .5rem 1.1rem; font-size: .85rem;
-      font-weight: 700; cursor: pointer;
+      background: var(--text); color: var(--bg);
+      border: none; border-radius: 10px; padding: .45rem 1.1rem; font-size: .84rem;
+      font-weight: 600; cursor: pointer;
     }
-    .composer button#send:disabled { opacity: .45; cursor: default; }
-    .advanced-toggle { font-size: .75rem; color: var(--muted); cursor: pointer; text-decoration: underline; }
-    .advanced-row { display: none; gap: .5rem; margin-top: .5rem; }
+    .composer button#send:disabled { opacity: .4; cursor: default; }
+    .advanced-toggle { font-size: .78rem; color: var(--muted); cursor: pointer; }
+    .advanced-toggle:hover { color: var(--text); }
+    .advanced-row { display: none; gap: .5rem; margin-top: .6rem; }
     .advanced-row.open { display: flex; }
     .advanced-row select {
-      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      background: var(--panel-2); color: var(--text); border: 1px solid transparent;
       border-radius: 8px; padding: .4rem .6rem; font-size: .78rem;
     }
-    #status { color: var(--muted); font-size: .78rem; margin-left: .3rem; }
+    #status { color: var(--muted); font-size: .78rem; margin-left: .2rem; }
 
-    .file-tree { font-size: .78rem; }
-    .file-tree ul { list-style: none; margin: 0; padding-left: 1rem; }
+    .file-tree { font-size: .8rem; }
+    .file-tree ul { list-style: none; margin: 0; padding-left: 1.1rem; }
     .file-tree > ul { padding-left: 0; }
-    .file-tree li { padding: .1rem 0; color: var(--muted); white-space: nowrap; }
+    .file-tree li { padding: .15rem 0; color: var(--muted); white-space: nowrap; }
     .file-tree .dir { color: var(--text); font-weight: 600; }
     .file-tree .file-name { cursor: pointer; }
     .file-tree .file-name:hover { color: var(--text); text-decoration: underline; }
@@ -187,66 +226,70 @@
     }
     .modal-overlay.open { display: flex; }
     .modal-box {
-      background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+      background: var(--panel); border: 1px solid var(--border); border-radius: 18px;
       width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column;
       box-shadow: 0 20px 60px var(--shadow);
     }
     .modal-header {
       display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-      padding: .85rem 1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
+      padding: 1rem 1.1rem; border-bottom: 1px solid var(--border); flex-shrink: 0;
     }
-    .modal-header .title { font-size: .85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .modal-header .title { font-size: .9rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .modal-close {
-      background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; line-height: 1; flex-shrink: 0;
+      background: none; border: none; color: var(--muted); font-size: 1.2rem; cursor: pointer; line-height: 1; flex-shrink: 0;
     }
     .modal-close:hover { color: var(--text); }
-    .modal-body { padding: 1rem; overflow-y: auto; }
-    .modal-footer { padding: .75rem 1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: .5rem; flex-shrink: 0; }
+    .modal-body { padding: 1.1rem; overflow-y: auto; }
+    .modal-footer { padding: .8rem 1.1rem; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: .5rem; flex-shrink: 0; }
 
     .new-folder-row { display: flex; gap: .4rem; margin-bottom: .6rem; align-items: center; }
     .new-folder-row input {
-      flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
-      border-radius: 6px; padding: .4rem .5rem; font-size: .8rem;
+      flex: 1; background: var(--panel-2); color: var(--text); border: 1px solid transparent;
+      border-radius: 8px; padding: .4rem .5rem; font-size: .8rem;
     }
 
-    .conn-list { list-style: none; margin: 0 0 .5rem; padding: 0; font-size: .82rem; }
+    .conn-list { list-style: none; margin: 0 0 .5rem; padding: 0; font-size: .85rem; }
     .conn-list li {
       display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-      padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 8px; margin-bottom: .4rem;
-      background: var(--bg);
+      padding: .6rem .7rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: .45rem;
+      background: var(--panel-2);
     }
     .conn-list .conn-info { min-width: 0; }
     .conn-list .conn-name { font-weight: 600; }
-    .conn-list .conn-meta { font-size: .72rem; color: var(--muted); }
+    .conn-list .conn-meta { font-size: .74rem; color: var(--muted); }
     .conn-list .conn-del {
-      background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px;
-      padding: .25rem .55rem; font-size: .72rem; cursor: pointer; flex-shrink: 0;
+      background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 999px;
+      padding: .3rem .65rem; font-size: .74rem; cursor: pointer; flex-shrink: 0;
     }
     .conn-list .conn-del:hover { color: var(--complex); border-color: var(--complex); }
     .conn-form { display: flex; flex-direction: column; gap: .5rem; }
     .conn-form input, .conn-form select {
-      background: var(--bg); color: var(--text); border: 1px solid var(--border);
-      border-radius: 6px; padding: .5rem .6rem; font-size: .82rem; width: 100%;
+      background: var(--panel-2); color: var(--text); border: 1px solid transparent;
+      border-radius: 10px; padding: .55rem .65rem; font-size: .85rem; width: 100%;
     }
-    .browse-list { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
+    .conn-form input:focus, .conn-form select:focus { outline: none; border-color: var(--border); }
+    .browse-list { list-style: none; margin: 0; padding: 0; font-size: .88rem; }
     .browse-list li {
-      padding: .45rem .5rem; border-radius: 6px; cursor: pointer; color: var(--text);
+      padding: .5rem .55rem; border-radius: 8px; cursor: pointer; color: var(--text);
     }
     .browse-list li:hover { background: var(--panel-2); }
     .browse-list li.up { color: var(--muted); }
     .modal-btn {
-      background: var(--panel-2); color: var(--text); border: 1px solid var(--border);
-      border-radius: 8px; padding: .45rem .9rem; font-size: .82rem; cursor: pointer;
+      background: var(--panel-2); color: var(--text); border: 1px solid transparent;
+      border-radius: 10px; padding: .5rem 1rem; font-size: .82rem; cursor: pointer;
     }
-    .modal-btn.primary { background: linear-gradient(180deg, var(--accent), #4ec99a); color: #06251b; border: none; font-weight: 700; }
+    .modal-btn:hover { border-color: var(--border); }
+    .modal-btn.primary { background: var(--text); color: var(--bg); font-weight: 600; }
+    .modal-btn.primary:hover { opacity: .88; border-color: transparent; }
 
     .file-viewer-pre {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
-      padding: .85rem; font-size: .82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
+      padding: .9rem; font-size: .82rem; overflow-x: auto; white-space: pre-wrap; word-break: break-word;
+      font-family: var(--mono);
     }
 
     /* Rendered markdown inside a response card */
-    .markdown-body { font-size: .87rem; line-height: 1.55; }
+    .markdown-body { font-size: .89rem; line-height: 1.6; }
     .markdown-body > *:first-child { margin-top: 0; }
     .markdown-body > *:last-child { margin-bottom: 0; }
     .markdown-body h1, .markdown-body h2, .markdown-body h3 {
@@ -262,11 +305,11 @@
       margin: .6em 0; padding: .1em 1em; border-left: 3px solid var(--border); color: var(--muted);
     }
     .markdown-body code {
-      background: var(--bg); border: 1px solid var(--border); padding: .1em .35em;
+      background: var(--panel-2); border: 1px solid var(--border); padding: .1em .35em;
       border-radius: 4px; font-size: .9em;
     }
     .markdown-body pre {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
       padding: .75em .9em; overflow-x: auto; margin: .6em 0;
     }
     .markdown-body pre code { background: none; border: none; padding: 0; font-size: .85em; }
@@ -274,7 +317,7 @@
     .markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: .35em .6em; }
     .markdown-body th { background: var(--panel-2); }
     .markdown-body .mermaid {
-      background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+      background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px;
       padding: .75em; margin: .6em 0; display: flex; justify-content: center;
     }
   </style>
@@ -285,17 +328,18 @@
       <button class="panel-toggle" id="toggle-left">☰ Projects</button>
       <h1>manifold-deck</h1>
     </div>
-    <div class="hdr-stats" id="hdr-stats"></div>
-    <button class="modal-btn" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
-    <button class="modal-btn" id="import-btn" title="Import Claude Code / Codex CLI history from this machine">⇩ Import history</button>
-    <button class="modal-btn" id="connections-btn" title="Manage connections">⚙ Connections</button>
-    <button class="panel-toggle" id="toggle-right">📁 Files</button>
+    <div class="hdr-right">
+      <div class="hdr-stats" id="hdr-stats"></div>
+      <button class="icon-btn" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
+      <button class="icon-btn wide" id="import-btn" title="Import Claude Code / Codex CLI history from this machine">Import history</button>
+      <button class="icon-btn wide" id="connections-btn" title="Manage connections">Connections</button>
+      <button class="panel-toggle" id="toggle-right">📁 Files</button>
+    </div>
   </header>
 
   <div class="layout">
     <div class="backdrop" id="backdrop"></div>
     <div class="pane pane-left" id="pane-left">
-      <div class="section-label">Projects</div>
       <input id="project-search" placeholder="Search projects…">
       <div id="project-list"></div>
       <div class="add-project">
@@ -306,24 +350,28 @@
     </div>
 
     <div class="pane-center">
-      <div class="thread" id="thread"></div>
+      <div class="thread" id="thread"><div class="thread-inner" id="thread-inner"></div></div>
       <div class="composer">
-        <textarea id="prompt" placeholder="Ask something — it'll be classified and routed live."></textarea>
-        <div class="composer-row">
-          <button id="send">Send</button>
-          <span class="advanced-toggle" id="advanced-toggle">advanced</span>
-          <span id="status"></span>
-        </div>
-        <div class="advanced-row" id="advanced-row">
-          <select id="backend-override">
-            <option value="">Auto backend</option>
-          </select>
-          <select id="tier-override">
-            <option value="">Auto tier</option>
-            <option value="SIMPLE">Pin: Simple</option>
-            <option value="MEDIUM">Pin: Medium</option>
-            <option value="COMPLEX">Pin: Complex</option>
-          </select>
+        <div class="composer-inner">
+          <div class="composer-box">
+            <textarea id="prompt" placeholder="Ask something — it'll be classified and routed live."></textarea>
+            <div class="composer-row">
+              <button id="send">Send</button>
+              <span class="advanced-toggle" id="advanced-toggle">Advanced</span>
+              <span id="status"></span>
+            </div>
+          </div>
+          <div class="advanced-row" id="advanced-row">
+            <select id="backend-override">
+              <option value="">Auto backend</option>
+            </select>
+            <select id="tier-override">
+              <option value="">Auto tier</option>
+              <option value="SIMPLE">Pin: Simple</option>
+              <option value="MEDIUM">Pin: Medium</option>
+              <option value="COMPLEX">Pin: Complex</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -462,29 +510,57 @@
     renderProjectList();
   }
 
-  function renderProjectList() {
-    const filter = (state.projectFilter || '').trim().toLowerCase();
-    const visible = filter
-      ? state.projects.filter(p => p.name.toLowerCase().includes(filter) || p.cwd.toLowerCase().includes(filter))
-      : state.projects;
-    document.getElementById('project-list').innerHTML = visible.map(p => `
+  function projItemHtml(p) {
+    return `
       <div class="proj-item ${p.id === state.activeId ? 'active' : ''}" data-id="${p.id}">
         <div class="proj-main">
           <div>${esc(p.name)}</div>
           <div class="cwd">${esc(p.cwd)}</div>
         </div>
-        <button class="proj-delete" data-id="${p.id}" title="Delete project and its history">🗑</button>
-      </div>`).join('') || '<div class="empty-state">No projects match.</div>';
+        <div class="proj-actions">
+          <button class="proj-star ${p.starred ? 'starred' : ''}" data-id="${p.id}"
+            title="${p.starred ? 'Unstar' : 'Star'}">${p.starred ? '★' : '☆'}</button>
+          <button class="proj-delete" data-id="${p.id}" title="Delete project and its history">🗑</button>
+        </div>
+      </div>`;
+  }
+
+  function renderProjectList() {
+    const filter = (state.projectFilter || '').trim().toLowerCase();
+    // list_projects() already orders by last_used_at DESC — recency order is
+    // preserved within each group below, not re-sorted here.
+    const visible = filter
+      ? state.projects.filter(p => p.name.toLowerCase().includes(filter) || p.cwd.toLowerCase().includes(filter))
+      : state.projects;
+    const starred = visible.filter(p => p.starred);
+    const rest = visible.filter(p => !p.starred);
+    let html = '';
+    if (starred.length) html += '<div class="section-label">★ Starred</div>' + starred.map(projItemHtml).join('');
+    html += '<div class="section-label">Projects</div>' + rest.map(projItemHtml).join('');
+    if (!visible.length) html = '<div class="empty-state">No projects match.</div>';
+    document.getElementById('project-list').innerHTML = html;
     document.querySelectorAll('.proj-item .proj-main').forEach(el =>
       el.addEventListener('click', () => selectProject(parseInt(el.closest('.proj-item').dataset.id))));
     document.querySelectorAll('.proj-delete').forEach(el =>
       el.addEventListener('click', e => { e.stopPropagation(); deleteProject(parseInt(el.dataset.id)); }));
+    document.querySelectorAll('.proj-star').forEach(el =>
+      el.addEventListener('click', e => { e.stopPropagation(); toggleStar(parseInt(el.dataset.id)); }));
   }
 
   document.getElementById('project-search').addEventListener('input', e => {
     state.projectFilter = e.target.value;
     renderProjectList();
   });
+
+  async function toggleStar(id) {
+    const p = state.projects.find(p => p.id === id);
+    if (!p) return;
+    await fetch(`/api/projects/${id}/star`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ starred: !p.starred }),
+    });
+    await loadProjects();
+  }
 
   async function deleteProject(id) {
     const p = state.projects.find(p => p.id === id);
@@ -559,9 +635,11 @@
   }
 
   function renderThread() {
-    const el = document.getElementById('thread');
+    const outer = document.getElementById('thread');
+    const el = document.getElementById('thread-inner');
     if (!state.turns.length) {
-      el.innerHTML = '<div class="empty-state">No messages yet — send one below.</div>';
+      el.innerHTML = '<div class="empty-hero"><span class="spark">✳</span><h2>What should we do?</h2>' +
+        '<p>Send a message below — it\'ll be classified by complexity and routed live.</p></div>';
       return;
     }
     let html = '';
@@ -579,7 +657,7 @@
           html += '<div class="fanout-row">' + batch.map(b => `
             <div class="response-card">
               <div class="response-meta">
-                <span class="pill pill-${b.tier || 'PINNED'}">${b.tier || 'PINNED'}</span>
+                <span class="tag tag-${b.tier || 'PINNED'}">${b.tier || 'PINNED'}</span>
                 <code>${esc(b.backend)}/${esc(b.model)}</code>
                 <span>${b.latency_ms}ms${b.classify_ms ? ' (+' + b.classify_ms + 'ms routing)' : ''}</span>
                 <span>${fmtCost(b.cost_usd)}</span>
@@ -590,13 +668,13 @@
       } else { i++; }
     }
     el.innerHTML = html;
-    el.scrollTop = el.scrollHeight;
+    outer.scrollTop = outer.scrollHeight;
     renderMermaidBlocks(el);
   }
 
   async function refreshStats() {
     const s = await fetch('/summary').then(r => r.json());
-    const tiers = Object.entries(s.by_tier || {}).map(([t, c]) => `<span class="pill pill-${t}">${t} ${c}</span>`).join(' ');
+    const tiers = Object.entries(s.by_tier || {}).map(([t, c]) => `<span class="tag tag-${t}">${t} ${c}</span>`).join(' ');
     document.getElementById('hdr-stats').innerHTML =
       `<b>${s.total_requests}</b> requests &middot; <b>$${(s.estimated_cost_usd || 0).toFixed(4)}</b> est. cost &middot; ${tiers}`;
   }
@@ -774,7 +852,7 @@
       return `
         <li>
           <div class="conn-info">
-            <div class="conn-name">${esc(c.name)} ${c.is_default ? '<span class="pill pill-SIMPLE">default</span>' : ''}</div>
+            <div class="conn-name">${esc(c.name)} ${c.is_default ? '<span class="tag tag-SIMPLE">default</span>' : ''}</div>
             <div class="conn-meta">${esc(c.provider)} &middot; ${meta}</div>
           </div>
           <div style="display:flex; gap:.3rem; flex-shrink:0;">

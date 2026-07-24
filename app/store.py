@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS projects (
     cwd TEXT NOT NULL UNIQUE,
     name TEXT NOT NULL,
     created_at REAL NOT NULL,
-    last_used_at REAL NOT NULL
+    last_used_at REAL NOT NULL,
+    starred INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS turns (
@@ -81,6 +82,9 @@ def _connect() -> sqlite3.Connection:
     for col in ("cli_argv_template", "cli_output_mode"):
         if col not in existing_cols:
             conn.execute(f"ALTER TABLE connections ADD COLUMN {col} TEXT")
+    project_cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
+    if "starred" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
     return conn
 
 
@@ -124,6 +128,24 @@ def delete_project(project_id: int) -> None:
     with _connect() as conn:
         conn.execute("DELETE FROM turns WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+
+
+def touch_project(project_id: int) -> None:
+    """Bumps last_used_at to now — called whenever a project is actually
+    routed through, so the sidebar's recency ordering reflects real activity
+    rather than just creation time."""
+    with _connect() as conn:
+        conn.execute(
+            "UPDATE projects SET last_used_at = ? WHERE id = ?", (__import__("time").time(), project_id)
+        )
+
+
+def set_project_starred(project_id: int, starred: bool) -> dict | None:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("UPDATE projects SET starred = ? WHERE id = ?", (1 if starred else 0, project_id))
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def add_turn(turn: dict) -> int:
