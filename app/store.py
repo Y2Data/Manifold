@@ -41,11 +41,17 @@ CREATE TABLE IF NOT EXISTS connections (
     name TEXT NOT NULL,
     provider TEXT NOT NULL,          -- "claude" | "codex" | "kimi" | ... free label for grouping
     kind TEXT NOT NULL,              -- 'subscription_cli' | 'api_key_http'
-    cli TEXT,                        -- subscription_cli: 'claude' | 'codex'
+    cli TEXT,                        -- subscription_cli: 'claude' | 'codex' | any custom CLI name
     base_url TEXT,                   -- api_key_http: endpoint root
     wire_api TEXT,                   -- api_key_http: 'openai' | 'anthropic'
     api_key_ref TEXT,                -- api_key_http: keyring reference — never the raw key
     default_model TEXT,
+    cli_argv_template TEXT,          -- subscription_cli (non-claude/codex): JSON array of argv
+                                      -- tokens with {prompt}/{model} placeholders, e.g.
+                                      -- '["kimi","-p","{prompt}","-m","{model}","--output-format","text"]'
+    cli_output_mode TEXT,            -- subscription_cli (non-claude/codex): only 'text' implemented
+                                      -- today (raw stdout capture). Reserved for future
+                                      -- 'json_blob'/'ndjson' values.
     is_default INTEGER NOT NULL DEFAULT 0,  -- used by auto-mode fan-out per provider
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at REAL NOT NULL
@@ -58,6 +64,13 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(_DB_PATH)
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)
+    # Lightweight migration for DBs created before cli_argv_template/cli_output_mode
+    # existed — CREATE TABLE IF NOT EXISTS above is a no-op on an already-existing
+    # connections table, so new columns need an explicit ALTER TABLE.
+    existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(connections)")}
+    for col in ("cli_argv_template", "cli_output_mode"):
+        if col not in existing_cols:
+            conn.execute(f"ALTER TABLE connections ADD COLUMN {col} TEXT")
     return conn
 
 
@@ -213,13 +226,15 @@ def add_connection(conn_data: dict) -> dict:
         ).fetchone()
         conn_data["is_default"] = 1 if existing == 0 else 0
         conn_data["created_at"] = __import__("time").time()
+        conn_data.setdefault("cli_argv_template", None)
+        conn_data.setdefault("cli_output_mode", None)
         cur = conn.execute(
             """
             INSERT INTO connections
                 (name, provider, kind, cli, base_url, wire_api, api_key_ref, default_model,
-                 is_default, enabled, created_at)
+                 cli_argv_template, cli_output_mode, is_default, enabled, created_at)
             VALUES (:name, :provider, :kind, :cli, :base_url, :wire_api, :api_key_ref, :default_model,
-                    :is_default, :enabled, :created_at)
+                    :cli_argv_template, :cli_output_mode, :is_default, :enabled, :created_at)
             """,
             conn_data,
         )

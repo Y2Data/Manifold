@@ -21,7 +21,7 @@ import time
 import uuid
 
 from app.project_files import build_file_context
-from app.routing.backends import BackendError, BackendResult, run_claude, run_codex
+from app.routing.backends import BackendError, BackendResult, run_claude, run_codex, run_generic_cli
 from app.routing.classifier import Tier, classify_with_model
 from app.routing.http_backend import run_http_connection
 from app.store import (
@@ -70,7 +70,13 @@ async def _run_connection(
         # the subprocess at the project dir, no text injection needed.
         if connection["cli"] == "codex":
             return await run_codex(prompt, _CODEX_TIER_EFFORT[tier], cwd=project_cwd)
-        return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier], cwd=project_cwd)
+        if connection["cli"] == "claude":
+            return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier], cwd=project_cwd)
+        # Any other CLI: routable purely from its stored connection config
+        # (cli_argv_template / cli_output_mode), no hardcoded per-CLI Python.
+        return await run_generic_cli(
+            connection, prompt, connection.get("default_model") or "", cwd=project_cwd
+        )
     # HTTP connections (Kimi, etc.) have no tool-calling loop at all — the
     # only way to give them any file awareness is pasting it into the prompt.
     return await run_http_connection(build_file_context(project_cwd, prompt), connection)

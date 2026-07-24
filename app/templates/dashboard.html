@@ -379,7 +379,20 @@
             <select id="conn-cli">
               <option value="claude">claude</option>
               <option value="codex">codex</option>
+              <option value="custom">custom (any other headless CLI)</option>
             </select>
+            <input id="conn-cli-custom-name" placeholder="CLI command name (e.g. kimi)" style="display:none;">
+            <div id="conn-cli-custom-fields" style="display:none;">
+              <textarea id="conn-cli-argv" rows="3" style="width:100%; font-family:monospace; font-size:.78rem;"
+                placeholder='One argv token per line, e.g.:&#10;kimi&#10;-p&#10;{prompt}&#10;-m&#10;{model}&#10;--output-format&#10;text'></textarea>
+              <p style="margin:.25rem 0 0; font-size:.72rem; color:var(--muted);">
+                One argv token per line. Must include a <code>{prompt}</code> token (substituted with
+                the prompt text); <code>{model}</code> is optional (substituted with the default model
+                below). Only <code>cli_output_mode: "text"</code> (raw stdout, no usage/cost parsing) is
+                supported today.
+              </p>
+              <input id="conn-cli-model" placeholder="Default model (optional, e.g. kimi-k2.6)">
+            </div>
           </div>
 
           <div id="conn-http-fields">
@@ -774,6 +787,12 @@
     document.getElementById('conn-cli-row').style.display = isHttp ? 'none' : '';
   });
 
+  document.getElementById('conn-cli').addEventListener('change', e => {
+    const isCustom = e.target.value === 'custom';
+    document.getElementById('conn-cli-custom-name').style.display = isCustom ? '' : 'none';
+    document.getElementById('conn-cli-custom-fields').style.display = isCustom ? '' : 'none';
+  });
+
   document.getElementById('conn-add-btn').addEventListener('click', async () => {
     const kind = document.getElementById('conn-kind').value;
     const body = {
@@ -783,7 +802,20 @@
     };
     if (!body.name || !body.provider) { alert('Name and provider are required.'); return; }
     if (kind === 'subscription_cli') {
-      body.cli = document.getElementById('conn-cli').value;
+      const cli = document.getElementById('conn-cli').value;
+      if (cli === 'custom') {
+        body.cli = document.getElementById('conn-cli-custom-name').value.trim();
+        body.cli_argv_template = document.getElementById('conn-cli-argv').value
+          .split('\n').map(s => s.trim()).filter(s => s.length > 0);
+        body.cli_output_mode = 'text';
+        body.default_model = document.getElementById('conn-cli-model').value.trim() || null;
+        if (!body.cli) { alert('Custom CLIs need a command name.'); return; }
+        if (!body.cli_argv_template.includes('{prompt}')) {
+          alert('cli_argv_template must include a {prompt} token.'); return;
+        }
+      } else {
+        body.cli = cli;
+      }
     } else {
       body.wire_api = document.getElementById('conn-wire').value;
       body.base_url = document.getElementById('conn-base-url').value.trim();
@@ -799,7 +831,8 @@
       alert(err?.detail || `Failed to add connection (${res.status})`);
       return;
     }
-    ['conn-name', 'conn-provider', 'conn-base-url', 'conn-model', 'conn-api-key'].forEach(id =>
+    ['conn-name', 'conn-provider', 'conn-base-url', 'conn-model', 'conn-api-key',
+     'conn-cli-custom-name', 'conn-cli-argv', 'conn-cli-model'].forEach(id =>
       document.getElementById(id).value = '');
     await loadConnections();
   });

@@ -84,6 +84,37 @@ async def run_claude(
     )
 
 
+async def run_generic_cli(
+    connection: dict, prompt: str, model: str, cwd: str | None = None, timeout_s: float = 180.0
+) -> BackendResult:
+    """Runs any headless-capable CLI configured via the Connections UI/API as a
+    'subscription_cli' connection with a non-claude/codex `cli` value. The
+    connection declares its own argv shape (`cli_argv_template`, a JSON array
+    of tokens with {prompt}/{model} placeholders — covers positional args,
+    flags, or any mix) so no per-CLI Python code is needed.
+
+    v1 only supports cli_output_mode == 'text': the raw stdout is captured
+    and returned as-is, with no usage/cost parsing — that requires knowing
+    each CLI's own output schema, which this mode deliberately avoids.
+    """
+    argv_template = json.loads(connection["cli_argv_template"])
+    argv = [token.replace("{prompt}", prompt).replace("{model}", model or "") for token in argv_template]
+
+    t0 = time.monotonic()
+    out = await _run(argv, timeout_s=timeout_s, cwd=cwd)
+    latency_ms = int((time.monotonic() - t0) * 1000)
+    return BackendResult(
+        text=out.strip(),
+        model=model,
+        backend=connection["cli"],
+        latency_ms=latency_ms,
+        cost_usd=None,
+        input_tokens=None,
+        output_tokens=None,
+        raw={},
+    )
+
+
 async def run_codex(prompt: str, reasoning_effort: str, cwd: str | None = None) -> BackendResult:
     """Runs codex exec at a given reasoning effort (low/medium/high) — the
     model itself is left at whatever's configured in ~/.codex/config.toml;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import APIRouter, HTTPException
@@ -21,11 +22,14 @@ class NewConnection(BaseModel):
     name: str
     provider: str
     kind: str  # "subscription_cli" | "api_key_http"
-    cli: str | None = None  # subscription_cli only: "claude" | "codex"
+    cli: str | None = None  # subscription_cli only: "claude" | "codex" | any custom CLI name
     base_url: str | None = None  # api_key_http only
     wire_api: str | None = None  # api_key_http only: "openai" | "anthropic"
     api_key: str | None = None  # api_key_http only — raw key, stored via keyring, never in the DB
     default_model: str | None = None
+    # subscription_cli, custom (non-claude/codex) CLIs only:
+    cli_argv_template: list[str] | None = None  # argv tokens with {prompt}/{model} placeholders
+    cli_output_mode: str | None = None  # only "text" is implemented today
 
 
 @router.get("")
@@ -38,8 +42,25 @@ async def api_list_connections():
 async def api_add_connection(body: NewConnection):
     if body.kind not in ("subscription_cli", "api_key_http"):
         raise HTTPException(400, f"invalid kind: {body.kind}")
+    if body.kind == "subscription_cli" and not body.cli:
+        raise HTTPException(400, "subscription_cli connections need a cli")
     if body.kind == "subscription_cli" and body.cli not in ("claude", "codex"):
-        raise HTTPException(400, "subscription_cli connections need cli: 'claude' or 'codex'")
+        # Any other headless-capable CLI is routable as long as it declares how
+        # to build its argv and how to read its output — no Python changes needed.
+        if not body.cli_argv_template or not isinstance(body.cli_argv_template, list):
+            raise HTTPException(
+                400,
+                "custom subscription_cli connections need a non-empty cli_argv_template",
+            )
+        if "{prompt}" not in body.cli_argv_template:
+            raise HTTPException(
+                400, "cli_argv_template must contain the literal token '{prompt}'"
+            )
+        if body.cli_output_mode != "text":
+            raise HTTPException(
+                400,
+                "only cli_output_mode: 'text' is supported today for custom CLIs",
+            )
     if body.kind == "api_key_http":
         if not body.base_url or body.wire_api not in ("openai", "anthropic"):
             raise HTTPException(400, "api_key_http connections need base_url and wire_api")
@@ -63,6 +84,8 @@ async def api_add_connection(body: NewConnection):
             "wire_api": body.wire_api,
             "api_key_ref": api_key_ref,
             "default_model": body.default_model,
+            "cli_argv_template": json.dumps(body.cli_argv_template) if body.cli_argv_template else None,
+            "cli_output_mode": body.cli_output_mode,
             "enabled": 1,
         }
     )
