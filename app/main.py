@@ -59,24 +59,33 @@ async def omnigent_spa(full_path: str):
 
 
 # The compiled bundle's client-side router hardcodes its own internal links
-# as root-relative (/c/{id}, /inbox, /settings, /login, /register, /members)
-# — it has no concept of the /app mount prefix, since it was built assuming
-# root deployment. These specific patterns don't collide with any existing
-# manifold-deck route, so serve index.html at the exact paths the bundle
-# itself generates, rather than only under /app. (Bare "/" is NOT included
-# here — that's the existing dashboard and stays that way; the compiled
-# app's own literal-"/" home screen is consequently only reachable via
-# /app, not by clicking its in-app "New session" link, which points at "/".
-# Flagged to the user as a known rough edge rather than patched silently.)
-for _spa_root_route in ("/inbox", "/settings", "/login", "/register", "/members"):
+# as root-relative (/c/{id}, /inbox, /settings, /login, /register, /members,
+# plus nested sub-routes like /settings/policies) — it has no concept of the
+# /app mount prefix, since it was built assuming root deployment. These
+# specific patterns don't collide with any existing manifold-deck route, so
+# serve index.html at the exact paths (and sub-paths) the bundle itself
+# generates, rather than only under /app. Each needs both an exact-path route
+# (for the bare "/settings" etc.) and a {path:path} route (for
+# "/settings/policies" etc.) — FastAPI doesn't treat a path-converter route
+# as matching zero extra segments. (Bare "/" is NOT included here — that's
+# the existing dashboard and stays that way; the compiled app's own
+# literal-"/" home screen is consequently only reachable via /app, not by
+# clicking its in-app "New session" link, which points at "/". Flagged to
+# the user as a known rough edge rather than patched silently.)
+async def omnigent_spa_conversation(full_path: str):
+    return FileResponse(_OMNIGENT_STATIC / "index.html")
+
+
+for _spa_root_route in ("/inbox", "/settings", "/login", "/register", "/members", "/c"):
     app.add_api_route(
         _spa_root_route, omnigent_spa_root, methods=["GET"], include_in_schema=False
     )
-
-
-@app.get("/c/{full_path:path}")
-async def omnigent_spa_conversation(full_path: str):
-    return FileResponse(_OMNIGENT_STATIC / "index.html")
+    app.add_api_route(
+        _spa_root_route + "/{full_path:path}",
+        omnigent_spa_conversation,
+        methods=["GET"],
+        include_in_schema=False,
+    )
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 

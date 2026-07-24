@@ -8,11 +8,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from app.omnigent_compat import ids
 from app.store import get_project
 
 router = APIRouter()
+
+
+class WriteFileBody(BaseModel):
+    content: str
+    encoding: str = "utf-8"
 
 
 @router.get("/v1/sessions/{session_id}/resources/environments/default")
@@ -114,3 +120,23 @@ async def get_environment_file_content(session_id: str, relative_path: str):
     if text is None:
         raise HTTPException(404, "file not found or not a readable text file")
     return {"path": relative_path, "content": text}
+
+
+@router.put("/v1/sessions/{session_id}/resources/environments/default/filesystem/{relative_path:path}")
+async def put_environment_file_content(session_id: str, relative_path: str, body: WriteFileBody):
+    """The rich file viewer autosaves through this route (full-content
+    replace, not a diff) — was 405ing since only GET existed. Real writes
+    to a real project file, so it reuses read_file_text's exact
+    path-escape guard (write_file_text in app/project_files.py) and only
+    overwrites files that already exist — no arbitrary new-file creation
+    via this route."""
+    from app.project_files import write_file_text
+
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    root = Path(project["cwd"])
+    if not write_file_text(root, relative_path, body.content):
+        raise HTTPException(404, "file not found or path escapes the project root")
+    return {"path": relative_path, "bytes": len(body.content.encode(body.encoding or "utf-8"))}

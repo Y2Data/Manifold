@@ -53,6 +53,18 @@ def read_file_text(root: Path, rel_path: str) -> str | None:
         return None
 
 
+def write_file_text(root: Path, rel_path: str, content: str) -> bool:
+    """Full-content replace of an existing file within `root`. Same
+    path-escape guard as read_file_text; also requires the target to
+    already exist as a file — this is for saving edits to a file already
+    being viewed, not for creating arbitrary new files."""
+    full = (root / rel_path).resolve()
+    if not full.is_relative_to(root.resolve()) or not full.is_file():
+        return False
+    full.write_text(content, encoding="utf-8")
+    return True
+
+
 def _render_tree(nodes: list[dict], indent: int = 0) -> list[str]:
     lines = []
     for n in nodes:
