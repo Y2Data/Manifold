@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SKIP_DIRS = {".git", "node_modules", ".venv", "__pycache__", ".DS_Store", "dist", "build"}
+SKIP_DIRS = {
+    ".git", "node_modules", ".venv", "__pycache__", ".DS_Store", "dist", "build",
+    ".claude", ".pytest_cache",
+}
 MAX_DEPTH = 3
 MAX_ENTRIES = 300
 MAX_FILE_BYTES = 512_000

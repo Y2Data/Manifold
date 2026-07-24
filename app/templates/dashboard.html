@@ -107,10 +107,21 @@
     .proj-item {
       padding: .5rem .6rem; border-radius: 8px; cursor: pointer; font-size: .82rem;
       margin-bottom: .2rem; color: var(--muted);
+      display: flex; align-items: center; justify-content: space-between; gap: .4rem;
     }
     .proj-item:hover { background: var(--panel-2); }
     .proj-item.active { background: var(--panel-2); color: var(--text); border: 1px solid var(--border); }
+    .proj-item .proj-main { min-width: 0; flex: 1; }
     .proj-item .cwd { font-size: .68rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .proj-item .proj-delete {
+      flex-shrink: 0; background: none; border: none; color: var(--muted); cursor: pointer;
+      font-size: .8rem; padding: .1rem .3rem; border-radius: 4px; line-height: 1;
+    }
+    .proj-item .proj-delete:hover { background: var(--panel); color: var(--text); }
+    #project-search {
+      width: 100%; background: var(--panel); color: var(--text); border: 1px solid var(--border);
+      border-radius: 8px; padding: .4rem .6rem; font-size: .8rem; margin-bottom: .5rem;
+    }
     .section-label {
       font-size: .68rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em;
       margin: .75rem 0 .4rem; font-weight: 600;
@@ -285,6 +296,7 @@
     <div class="backdrop" id="backdrop"></div>
     <div class="pane pane-left" id="pane-left">
       <div class="section-label">Projects</div>
+      <input id="project-search" placeholder="Search projects…">
       <div id="project-list"></div>
       <div class="add-project">
         <input id="new-project-cwd" placeholder="/path/to/project">
@@ -451,13 +463,42 @@
   }
 
   function renderProjectList() {
-    document.getElementById('project-list').innerHTML = state.projects.map(p => `
+    const filter = (state.projectFilter || '').trim().toLowerCase();
+    const visible = filter
+      ? state.projects.filter(p => p.name.toLowerCase().includes(filter) || p.cwd.toLowerCase().includes(filter))
+      : state.projects;
+    document.getElementById('project-list').innerHTML = visible.map(p => `
       <div class="proj-item ${p.id === state.activeId ? 'active' : ''}" data-id="${p.id}">
-        <div>${esc(p.name)}</div>
-        <div class="cwd">${esc(p.cwd)}</div>
-      </div>`).join('');
-    document.querySelectorAll('.proj-item').forEach(el =>
-      el.addEventListener('click', () => selectProject(parseInt(el.dataset.id))));
+        <div class="proj-main">
+          <div>${esc(p.name)}</div>
+          <div class="cwd">${esc(p.cwd)}</div>
+        </div>
+        <button class="proj-delete" data-id="${p.id}" title="Delete project and its history">🗑</button>
+      </div>`).join('') || '<div class="empty-state">No projects match.</div>';
+    document.querySelectorAll('.proj-item .proj-main').forEach(el =>
+      el.addEventListener('click', () => selectProject(parseInt(el.closest('.proj-item').dataset.id))));
+    document.querySelectorAll('.proj-delete').forEach(el =>
+      el.addEventListener('click', e => { e.stopPropagation(); deleteProject(parseInt(el.dataset.id)); }));
+  }
+
+  document.getElementById('project-search').addEventListener('input', e => {
+    state.projectFilter = e.target.value;
+    renderProjectList();
+  });
+
+  async function deleteProject(id) {
+    const p = state.projects.find(p => p.id === id);
+    if (!confirm(`Delete "${p ? p.name : id}" and all its history? This can't be undone.`)) return;
+    const res = await fetch(`/api/projects/${id}`, { method: 'DELETE' });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      alert(body?.detail || `Failed to delete (${res.status})`);
+      return;
+    }
+    if (state.activeId === id) state.activeId = null;
+    await loadProjects();
+    if (state.activeId) await Promise.all([loadTurns(), loadFiles()]);
+    else { state.turns = []; renderThread(); document.getElementById('file-tree').innerHTML = ''; }
   }
 
   async function selectProject(id) {

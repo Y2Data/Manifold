@@ -7,7 +7,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.project_files import MAX_FILE_BYTES, walk_tree
-from app.store import get_or_create_project, get_project, get_project_turns, list_projects
+from app.store import (
+    delete_project,
+    get_or_create_project,
+    get_project,
+    get_project_turns,
+    list_projects,
+)
 
 router = APIRouter(prefix="/api/projects")
 
@@ -70,6 +76,14 @@ async def api_browse_mkdir(body: NewFolder):
         raise HTTPException(400, f"already exists: {new_dir}")
     new_dir.mkdir()
     return {"path": str(new_dir), "name": name}
+
+
+@router.delete("/{project_id}")
+async def api_delete_project(project_id: int):
+    if get_project(project_id) is None:
+        raise HTTPException(404, "project not found")
+    delete_project(project_id)
+    return {"deleted": project_id}
 
 
 @router.get("/{project_id}/turns")

@@ -117,6 +117,15 @@ def get_project(project_id: int) -> dict | None:
         return dict(row) if row else None
 
 
+def delete_project(project_id: int) -> None:
+    """Deletes a project and its turns. Leaves `imported_files` alone — a
+    file already marked imported stays skipped on future import runs, so
+    deleting a junk imported project doesn't cause it to reappear."""
+    with _connect() as conn:
+        conn.execute("DELETE FROM turns WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
+
+
 def add_turn(turn: dict) -> int:
     with _connect() as conn:
         cur = conn.execute(
