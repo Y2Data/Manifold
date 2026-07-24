@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS turns (
     project_id INTEGER NOT NULL,
     ts REAL NOT NULL,
     role TEXT NOT NULL,              -- 'user' | 'assistant'
-    backend TEXT,                    -- 'claude' | 'codex' — null for user turns
+    backend TEXT,                    -- connection name at the time of the call — null for user turns
     model TEXT,
     tier TEXT,                       -- SIMPLE/MEDIUM/COMPLEX/PINNED — null for user turns
     content TEXT NOT NULL,
@@ -30,6 +30,25 @@ CREATE TABLE IF NOT EXISTS turns (
     output_tokens INTEGER,
     fanout_group TEXT,               -- shared across turns answering the same user turn
     FOREIGN KEY (project_id) REFERENCES projects(id)
+);
+
+-- A named, independently-configurable way to reach a model. Multiple rows
+-- can share the same `provider` (e.g. "Kimi Official" + "Kimi 3rd Party",
+-- or "Claude Sub" + "Claude Azure Foundry") — they're just distinct rows,
+-- nothing keys on provider being unique.
+CREATE TABLE IF NOT EXISTS connections (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    provider TEXT NOT NULL,          -- "claude" | "codex" | "kimi" | ... free label for grouping
+    kind TEXT NOT NULL,              -- 'subscription_cli' | 'api_key_http'
+    cli TEXT,                        -- subscription_cli: 'claude' | 'codex'
+    base_url TEXT,                   -- api_key_http: endpoint root
+    wire_api TEXT,                   -- api_key_http: 'openai' | 'anthropic'
+    api_key_ref TEXT,                -- api_key_http: keyring reference — never the raw key
+    default_model TEXT,
+    is_default INTEGER NOT NULL DEFAULT 0,  -- used by auto-mode fan-out per provider
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at REAL NOT NULL
 );
 """
 
@@ -114,6 +133,103 @@ def recent_decisions(limit: int = 50) -> list[dict]:
             (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def seed_default_connections() -> None:
+    """Preserves pre-connections behavior: a 'Claude Sub' and 'Codex Sub'
+    connection, each subscription_cli / default for their provider — only
+    runs once (no-op if any connection already exists)."""
+    with _connect() as conn:
+        (count,) = conn.execute("SELECT COUNT(*) FROM connections").fetchone()
+        if count:
+            return
+        now = __import__("time").time()
+        for name, provider, cli in (("Claude Sub", "claude", "claude"), ("Codex Sub", "codex", "codex")):
+            conn.execute(
+                """
+                INSERT INTO connections (name, provider, kind, cli, default_model, is_default, enabled, created_at)
+                VALUES (?, ?, 'subscription_cli', ?, NULL, 1, 1, ?)
+                """,
+                (name, provider, cli, now),
+            )
+
+
+def list_connections() -> list[dict]:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute("SELECT * FROM connections ORDER BY provider, id").fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_connection(connection_id: int) -> dict | None:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM connections WHERE id = ?", (connection_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_default_connection(provider: str) -> dict | None:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute(
+            "SELECT * FROM connections WHERE provider = ? AND is_default = 1 AND enabled = 1 LIMIT 1",
+            (provider,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def list_default_connections() -> list[dict]:
+    """Every provider's chosen default, enabled — this is the auto-mode
+    fan-out set. Mark/unmark a connection as default (set_default_connection)
+    to control which providers participate, instead of it being hardcoded."""
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM connections WHERE is_default = 1 AND enabled = 1 ORDER BY provider, id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_default_connection(connection_id: int) -> dict:
+    """Makes this connection the default for its provider — un-defaults any
+    sibling connection sharing that provider first (one default per provider)."""
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM connections WHERE id = ?", (connection_id,)).fetchone()
+        if row is None:
+            raise ValueError(f"connection {connection_id} not found")
+        conn.execute("UPDATE connections SET is_default = 0 WHERE provider = ?", (row["provider"],))
+        conn.execute("UPDATE connections SET is_default = 1 WHERE id = ?", (connection_id,))
+        row = conn.execute("SELECT * FROM connections WHERE id = ?", (connection_id,)).fetchone()
+        return dict(row)
+
+
+def add_connection(conn_data: dict) -> dict:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        # First connection for a given provider becomes its default automatically.
+        (existing,) = conn.execute(
+            "SELECT COUNT(*) FROM connections WHERE provider = ?", (conn_data["provider"],)
+        ).fetchone()
+        conn_data["is_default"] = 1 if existing == 0 else 0
+        conn_data["created_at"] = __import__("time").time()
+        cur = conn.execute(
+            """
+            INSERT INTO connections
+                (name, provider, kind, cli, base_url, wire_api, api_key_ref, default_model,
+                 is_default, enabled, created_at)
+            VALUES (:name, :provider, :kind, :cli, :base_url, :wire_api, :api_key_ref, :default_model,
+                    :is_default, :enabled, :created_at)
+            """,
+            conn_data,
+        )
+        row = conn.execute("SELECT * FROM connections WHERE id = ?", (cur.lastrowid,)).fetchone()
+        return dict(row)
+
+
+def delete_connection(connection_id: int) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM connections WHERE id = ?", (connection_id,))
 
 
 def summary() -> dict:

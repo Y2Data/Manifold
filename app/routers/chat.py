@@ -6,6 +6,7 @@ import uuid
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from app.routing.backends import BackendError
 from app.routing.classifier import Tier
 from app.routing.router import route
 from app.store import get_project, recent_decisions, summary
@@ -21,7 +22,7 @@ class Message(BaseModel):
 class ChatRequest(BaseModel):
     project_id: int
     messages: list[Message]
-    backend: str | None = None  # None = auto-decide; "claude" | "codex" | "both" = override
+    connection_id: int | None = None  # None = auto-decide; explicit id = force that connection
     tier: str | None = None  # None = auto-classify; "SIMPLE" | "MEDIUM" | "COMPLEX" = pin
 
 
@@ -42,9 +43,12 @@ async def chat_completions(req: ChatRequest):
         except ValueError:
             raise HTTPException(400, f"invalid tier: {req.tier}")
 
-    decisions = await route(
-        req.project_id, prompt, forced_backend=req.backend, forced_tier=forced_tier
-    )
+    try:
+        decisions = await route(
+            req.project_id, prompt, forced_connection_id=req.connection_id, forced_tier=forced_tier
+        )
+    except BackendError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
     choices = [
         {

@@ -1,13 +1,17 @@
-"""Ties classification to backend execution, threaded through a project's
+"""Ties classification to connection execution, threaded through a project's
 persistent history, with fan-out for COMPLEX/build requests.
 
-Auto mode now decides BOTH the tier and the backend (claude / codex / both)
-via a small-model call (classifier.classify_with_model) — not just the tier
-within a fixed backend like the first version did. "both" (or any COMPLEX
-classification) runs claude-opus and codex-high in parallel and returns both
-as separate turns sharing a fanout_group, so the UI can show them side by
-side rather than picking one — same idea as Omnigent's Polly/Debby, just
-without the sub-agent orchestration machinery.
+Auto mode decides tier + a coarse provider hint via a small-model call
+(classifier.classify_with_model), then dispatches to that provider's
+*default* connection. The routing target is itself selectable: each
+provider's default is just whichever connection has is_default=1 (toggle it
+via POST /api/connections/{id}/set-default — the Connections UI's "Set
+Default" button), and COMPLEX-tier fan-out runs across *every* connection
+currently marked default, not a hardcoded claude+codex pair — mark a third
+provider (Kimi, say) as its own default and it joins the fan-out too. This
+is deliberately still not the same as the classifier intelligently picking
+among arbitrary providers — it's the user's own explicit configuration
+(which connection is "the" default) driving what auto mode reaches for.
 """
 
 from __future__ import annotations
@@ -16,9 +20,16 @@ import asyncio
 import time
 import uuid
 
-from app.routing.backends import BackendResult, run_claude, run_codex
+from app.routing.backends import BackendError, BackendResult, run_claude, run_codex
 from app.routing.classifier import Tier, classify_with_model
-from app.store import add_turn, get_project_turns
+from app.routing.http_backend import run_http_connection
+from app.store import (
+    add_turn,
+    get_connection,
+    get_default_connection,
+    get_project_turns,
+    list_default_connections,
+)
 
 _CLAUDE_TIER_MODEL = {
     Tier.SIMPLE: "haiku",
@@ -49,17 +60,19 @@ def _build_context(project_id: int, prompt: str) -> str:
     return "\n".join(lines)
 
 
-async def _run_one(backend: str, tier: Tier, prompt: str) -> BackendResult:
-    if backend == "codex":
-        return await run_codex(prompt, _CODEX_TIER_EFFORT[tier])
-    return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier])
+async def _run_connection(connection: dict, tier: Tier, prompt: str) -> BackendResult:
+    if connection["kind"] == "subscription_cli":
+        if connection["cli"] == "codex":
+            return await run_codex(prompt, _CODEX_TIER_EFFORT[tier])
+        return await run_claude(prompt, _CLAUDE_TIER_MODEL[tier])
+    return await run_http_connection(prompt, connection)
 
 
 async def route(
     project_id: int,
     prompt: str,
     *,
-    forced_backend: str | None = None,
+    forced_connection_id: int | None = None,
     forced_tier: Tier | None = None,
 ) -> list[dict]:
     """Returns a list of decision dicts (len 1 normally, len 2 on fan-out).
@@ -75,33 +88,45 @@ async def route(
         }
     )
 
-    if forced_tier is not None:
-        tier, backend, classify_ms, model_used = forced_tier, (forced_backend or "claude"), 0, False
+    if forced_connection_id is not None:
+        connection = get_connection(forced_connection_id)
+        if connection is None:
+            raise BackendError(f"connection {forced_connection_id} not found")
+        tier = forced_tier or Tier.MEDIUM
+        classify_ms, model_used = 0, False
+        connections_to_run = [connection]
+    elif forced_tier is not None:
+        tier, classify_ms, model_used = forced_tier, 0, False
+        default = get_default_connection("claude")
+        connections_to_run = [default] if default else []
     else:
         # Context-aware: a terse follow-up ("now handle the retry logic too")
         # reads as SIMPLE in isolation but is a continuation of something
         # complex — the classifier needs the same history the answering
         # model(s) get, not just the raw new message.
-        tier, backend, classify_ms, model_used = await classify_with_model(context_prompt)
-        if forced_backend is not None:
-            backend = forced_backend
+        tier, backend_hint, classify_ms, model_used = await classify_with_model(context_prompt)
+        if tier == Tier.COMPLEX:
+            connections_to_run = list_default_connections()
+        else:
+            preferred = get_default_connection(backend_hint) or get_default_connection("claude")
+            connections_to_run = [preferred] if preferred else []
 
-    fan_out = backend == "both" or (tier == Tier.COMPLEX and forced_backend is None and forced_tier is None)
-    backends_to_run = ["claude", "codex"] if fan_out else [backend if backend != "both" else "claude"]
-    fanout_group = uuid.uuid4().hex[:12] if len(backends_to_run) > 1 else None
+    if not connections_to_run:
+        raise BackendError("no connection configured to handle this request")
+
+    fanout_group = uuid.uuid4().hex[:12] if len(connections_to_run) > 1 else None
 
     results = await asyncio.gather(
-        *(_run_one(b, tier, context_prompt) for b in backends_to_run),
+        *(_run_connection(c, tier, context_prompt) for c in connections_to_run),
         return_exceptions=True,
     )
 
     decisions = []
-    for b, result in zip(backends_to_run, results):
+    for c, result in zip(connections_to_run, results):
         if isinstance(result, Exception):
-            content = f"[{b} error: {result}]"
             result = BackendResult(
-                text=content, model="error", backend=b, latency_ms=0,
-                cost_usd=None, input_tokens=None, output_tokens=None, raw={},
+                text=f"[{c['name']} error: {result}]", model="error", backend=c["name"],
+                latency_ms=0, cost_usd=None, input_tokens=None, output_tokens=None, raw={},
             )
         turn = {
             "project_id": project_id, "ts": time.time(), "role": "assistant",

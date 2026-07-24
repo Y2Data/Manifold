@@ -4,17 +4,47 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>manifold-deck</title>
+  <script>
+    // Runs before first paint, so there's no flash of the wrong theme —
+    // an explicit prior choice (localStorage) always wins; otherwise the
+    // CSS's own prefers-color-scheme media query decides.
+    (function () {
+      var saved = localStorage.getItem('manifold-theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+    })();
+  </script>
   <style>
     :root {
       --bg: #0a0b0d; --panel: #15171b; --panel-2: #1c1f24; --border: #262a31;
       --text: #e8eaed; --muted: #8b93a1; --accent: #6ee7b7; --accent-2: #7c9eff;
       --simple: #6ee7b7; --medium: #ffcf6e; --complex: #ff8a8a; --pinned: #7c9eff;
+      --shadow: rgba(0,0,0,.5); --overlay: rgba(0,0,0,.6);
+      color-scheme: dark;
+    }
+    /* System preference is the default; an explicit data-theme (the header
+       toggle, persisted in localStorage) always wins over it. */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg: #f7f8fa; --panel: #ffffff; --panel-2: #eef0f3; --border: #dfe3e8;
+        --text: #1a1d21; --muted: #667085; --accent: #0e9f6e; --accent-2: #3b6fe0;
+        --simple: #0e9f6e; --medium: #b45309; --complex: #dc2626; --pinned: #3b6fe0;
+        --shadow: rgba(20,25,35,.08); --overlay: rgba(15,18,22,.4);
+        color-scheme: light;
+      }
+    }
+    :root[data-theme="light"] {
+      --bg: #f7f8fa; --panel: #ffffff; --panel-2: #eef0f3; --border: #dfe3e8;
+      --text: #1a1d21; --muted: #667085; --accent: #0e9f6e; --accent-2: #3b6fe0;
+      --simple: #0e9f6e; --medium: #b45309; --complex: #dc2626; --pinned: #3b6fe0;
+      --shadow: rgba(20,25,35,.08); --overlay: rgba(15,18,22,.4);
+      color-scheme: light;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
     body {
       font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
       background: var(--bg); color: var(--text); display: flex; flex-direction: column;
+      transition: background-color .15s ease, color .15s ease;
     }
     header {
       display: flex; align-items: center; justify-content: space-between; gap: .75rem;
@@ -61,14 +91,14 @@
       .panel-toggle { display: inline-block; }
       .pane-left, .pane-right {
         position: fixed; top: 0; bottom: 0; width: min(80vw, 300px); z-index: 20;
-        background: var(--bg); transition: transform .2s ease; box-shadow: 0 0 40px rgba(0,0,0,.5);
+        background: var(--bg); transition: transform .2s ease; box-shadow: 0 0 40px var(--shadow);
       }
       .pane-left { left: 0; transform: translateX(-101%); }
       .pane-left.open { transform: translateX(0); }
       .pane-right { right: 0; transform: translateX(101%); }
       .pane-right.open { transform: translateX(0); }
       .backdrop {
-        display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 15;
+        display: none; position: fixed; inset: 0; background: var(--overlay); z-index: 15;
       }
       .backdrop.open { display: block; }
       .fanout-row { flex-direction: column; }
@@ -141,14 +171,14 @@
     .file-tree .file-name:hover { color: var(--text); text-decoration: underline; }
 
     .modal-overlay {
-      display: none; position: fixed; inset: 0; background: rgba(0,0,0,.6);
+      display: none; position: fixed; inset: 0; background: var(--overlay);
       z-index: 50; align-items: center; justify-content: center; padding: 2rem;
     }
     .modal-overlay.open { display: flex; }
     .modal-box {
       background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
       width: min(640px, 100%); max-height: 80vh; display: flex; flex-direction: column;
-      box-shadow: 0 20px 60px rgba(0,0,0,.5);
+      box-shadow: 0 20px 60px var(--shadow);
     }
     .modal-header {
       display: flex; align-items: center; justify-content: space-between; gap: .5rem;
@@ -166,6 +196,26 @@
     .new-folder-row input {
       flex: 1; background: var(--bg); color: var(--text); border: 1px solid var(--border);
       border-radius: 6px; padding: .4rem .5rem; font-size: .8rem;
+    }
+
+    .conn-list { list-style: none; margin: 0 0 .5rem; padding: 0; font-size: .82rem; }
+    .conn-list li {
+      display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+      padding: .5rem .6rem; border: 1px solid var(--border); border-radius: 8px; margin-bottom: .4rem;
+      background: var(--bg);
+    }
+    .conn-list .conn-info { min-width: 0; }
+    .conn-list .conn-name { font-weight: 600; }
+    .conn-list .conn-meta { font-size: .72rem; color: var(--muted); }
+    .conn-list .conn-del {
+      background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px;
+      padding: .25rem .55rem; font-size: .72rem; cursor: pointer; flex-shrink: 0;
+    }
+    .conn-list .conn-del:hover { color: var(--complex); border-color: var(--complex); }
+    .conn-form { display: flex; flex-direction: column; gap: .5rem; }
+    .conn-form input, .conn-form select {
+      background: var(--bg); color: var(--text); border: 1px solid var(--border);
+      border-radius: 6px; padding: .5rem .6rem; font-size: .82rem; width: 100%;
     }
     .browse-list { list-style: none; margin: 0; padding: 0; font-size: .85rem; }
     .browse-list li {
@@ -225,6 +275,8 @@
       <h1>manifold-deck</h1>
     </div>
     <div class="hdr-stats" id="hdr-stats"></div>
+    <button class="modal-btn" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
+    <button class="modal-btn" id="connections-btn" title="Manage connections">⚙ Connections</button>
     <button class="panel-toggle" id="toggle-right">📁 Files</button>
   </header>
 
@@ -252,9 +304,6 @@
         <div class="advanced-row" id="advanced-row">
           <select id="backend-override">
             <option value="">Auto backend</option>
-            <option value="claude">Force: Claude</option>
-            <option value="codex">Force: Codex</option>
-            <option value="both">Force: Both</option>
           </select>
           <select id="tier-override">
             <option value="">Auto tier</option>
@@ -303,12 +352,61 @@
     </div>
   </div>
 
+  <div class="modal-overlay" id="connections-modal">
+    <div class="modal-box" style="width: min(560px, 100%);">
+      <div class="modal-header">
+        <span class="title">Connections</span>
+        <button class="modal-close" data-close="connections-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p style="margin:0 0 .75rem; font-size:.75rem; color:var(--muted);">
+          "Default" is what Auto mode reaches for — one per provider. COMPLEX-tier
+          fan-out runs every current default in parallel, so marking a connection
+          default also opts its provider into fan-out.
+        </p>
+        <ul class="conn-list" id="conn-list"></ul>
+
+        <div class="section-label" style="margin-top:1rem;">Add connection</div>
+        <div class="conn-form">
+          <input id="conn-name" placeholder="Name (e.g. Kimi Official)">
+          <input id="conn-provider" placeholder="Provider (e.g. kimi, claude, codex)">
+          <select id="conn-kind">
+            <option value="api_key_http">API key / custom endpoint</option>
+            <option value="subscription_cli">Subscription CLI (claude or codex)</option>
+          </select>
+
+          <div id="conn-cli-row" style="display:none;">
+            <select id="conn-cli">
+              <option value="claude">claude</option>
+              <option value="codex">codex</option>
+            </select>
+          </div>
+
+          <div id="conn-http-fields">
+            <select id="conn-wire">
+              <option value="openai">OpenAI wire (Bearer auth) — Kimi, most custom endpoints</option>
+              <option value="anthropic">Anthropic wire (x-api-key) — Claude on Azure Foundry, etc.</option>
+            </select>
+            <input id="conn-base-url" placeholder="Base URL, e.g. https://api.moonshot.ai/v1">
+            <input id="conn-model" placeholder="Default model / deployment name, e.g. kimi-k2.6">
+            <input id="conn-api-key" type="password" placeholder="API key">
+          </div>
+
+          <button class="modal-btn primary" id="conn-add-btn">Add Connection</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <script src="/static/marked.min.js"></script>
 <script src="/static/mermaid.min.js"></script>
 <script>
-  mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: (document.documentElement.dataset.theme || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark')) === 'light' ? 'default' : 'dark',
+  });
 
-  const state = { projects: [], activeId: null, turns: [] };
+  const state = { projects: [], activeId: null, turns: [], connections: [] };
 
   function esc(s) { return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
   function fmtCost(c) { return c ? '$' + c.toFixed(4) : '—'; }
@@ -574,7 +672,8 @@
     const promptEl = document.getElementById('prompt');
     const statusEl = document.getElementById('status');
     const sendBtn = document.getElementById('send');
-    const backend = document.getElementById('backend-override').value || null;
+    const connIdRaw = document.getElementById('backend-override').value;
+    const connection_id = connIdRaw ? parseInt(connIdRaw) : null;
     const tier = document.getElementById('tier-override').value || null;
     const prompt = promptEl.value.trim();
     if (!prompt || !state.activeId) return;
@@ -585,7 +684,7 @@
       const res = await fetch('/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          project_id: state.activeId, backend, tier,
+          project_id: state.activeId, connection_id, tier,
           messages: [{ role: 'user', content: prompt }],
         }),
       });
@@ -601,8 +700,113 @@
     }
   });
 
+  async function loadConnections() {
+    state.connections = await fetch('/api/connections').then(r => r.json());
+    renderConnList();
+    renderBackendOverrideOptions();
+  }
+
+  function renderConnList() {
+    const el = document.getElementById('conn-list');
+    if (!state.connections.length) {
+      el.innerHTML = '<li>(no connections configured)</li>';
+      return;
+    }
+    el.innerHTML = state.connections.map(c => {
+      const meta = c.kind === 'subscription_cli'
+        ? `subscription &middot; ${esc(c.cli)}`
+        : `${esc(c.wire_api)} &middot; ${esc(c.base_url)} &middot; ${esc(c.default_model)}`;
+      return `
+        <li>
+          <div class="conn-info">
+            <div class="conn-name">${esc(c.name)} ${c.is_default ? '<span class="pill pill-SIMPLE">default</span>' : ''}</div>
+            <div class="conn-meta">${esc(c.provider)} &middot; ${meta}</div>
+          </div>
+          <div style="display:flex; gap:.3rem; flex-shrink:0;">
+            ${c.is_default ? '' : `<button class="conn-del set-default" data-id="${c.id}">Set Default</button>`}
+            <button class="conn-del" data-id="${c.id}">Remove</button>
+          </div>
+        </li>`;
+    }).join('');
+    el.querySelectorAll('.set-default').forEach(btn =>
+      btn.addEventListener('click', async () => {
+        await fetch(`/api/connections/${btn.dataset.id}/set-default`, { method: 'POST' });
+        await loadConnections();
+      }));
+    el.querySelectorAll('.conn-del:not(.set-default)').forEach(btn =>
+      btn.addEventListener('click', async () => {
+        await fetch(`/api/connections/${btn.dataset.id}`, { method: 'DELETE' });
+        await loadConnections();
+      }));
+  }
+
+  function renderBackendOverrideOptions() {
+    const sel = document.getElementById('backend-override');
+    const current = sel.value;
+    sel.innerHTML = '<option value="">Auto backend</option>' + state.connections
+      .map(c => `<option value="${c.id}">Force: ${esc(c.name)}</option>`).join('');
+    sel.value = current;
+  }
+
+  function currentTheme() {
+    return document.documentElement.dataset.theme ||
+      (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+  }
+  function applyThemeIcon() {
+    document.getElementById('theme-toggle').textContent = currentTheme() === 'light' ? '☀️' : '🌙';
+  }
+  document.getElementById('theme-toggle').addEventListener('click', () => {
+    const next = currentTheme() === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('manifold-theme', next);
+    applyThemeIcon();
+  });
+  applyThemeIcon();
+
+  document.getElementById('connections-btn').addEventListener('click', () => {
+    openModal('connections-modal');
+    loadConnections();
+  });
+
+  document.getElementById('conn-kind').addEventListener('change', e => {
+    const isHttp = e.target.value === 'api_key_http';
+    document.getElementById('conn-http-fields').style.display = isHttp ? '' : 'none';
+    document.getElementById('conn-cli-row').style.display = isHttp ? 'none' : '';
+  });
+
+  document.getElementById('conn-add-btn').addEventListener('click', async () => {
+    const kind = document.getElementById('conn-kind').value;
+    const body = {
+      name: document.getElementById('conn-name').value.trim(),
+      provider: document.getElementById('conn-provider').value.trim(),
+      kind,
+    };
+    if (!body.name || !body.provider) { alert('Name and provider are required.'); return; }
+    if (kind === 'subscription_cli') {
+      body.cli = document.getElementById('conn-cli').value;
+    } else {
+      body.wire_api = document.getElementById('conn-wire').value;
+      body.base_url = document.getElementById('conn-base-url').value.trim();
+      body.default_model = document.getElementById('conn-model').value.trim();
+      body.api_key = document.getElementById('conn-api-key').value;
+    }
+    const res = await fetch('/api/connections', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => null);
+      alert(err?.detail || `Failed to add connection (${res.status})`);
+      return;
+    }
+    ['conn-name', 'conn-provider', 'conn-base-url', 'conn-model', 'conn-api-key'].forEach(id =>
+      document.getElementById(id).value = '');
+    await loadConnections();
+  });
+
   (async function init() {
     await loadProjects();
+    await loadConnections();
     if (state.activeId) await Promise.all([loadTurns(), loadFiles()]);
     await refreshStats();
   })();
