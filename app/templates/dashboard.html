@@ -20,6 +20,10 @@
       --text: #1C1B18; --muted: #6B6858;
       --accent: #2F6F5E; --accent-strong: #24594B; --accent-soft: color-mix(in srgb, #2F6F5E 14%, transparent);
       --tier-simple: #5C8A72; --tier-medium: #C1893C; --tier-complex: #B75B3D; --tier-null: #948E7C;
+      /* Darker "ink" shades of the same hues, used only for pill TEXT on a
+         tinted pill background — the base --tier-* vars stay lighter for
+         decorative uses (routing rail) where WCAG text-contrast doesn't apply. */
+      --tier-simple-ink: #486b59; --tier-medium-ink: #87602a; --tier-complex-ink: #9c4e34; --pill-ink: #746f5f;
       --shadow: rgba(28,27,24,.10); --overlay: rgba(28,27,24,.42);
       --font-sans: -apple-system, "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
       --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
@@ -34,6 +38,7 @@
         --text: #EDEBE2; --muted: #A19C8A;
         --accent: #4FA189; --accent-strong: #6BBBA2; --accent-soft: color-mix(in srgb, #4FA189 18%, transparent);
         --tier-simple: #7FAF8E; --tier-medium: #DDA85B; --tier-complex: #D0805F; --tier-null: #85806E;
+        --tier-simple-ink: #82b191; --tier-medium-ink: #dda85b; --tier-complex-ink: #d69073; --pill-ink: #948f7e;
         --shadow: rgba(0,0,0,.4); --overlay: rgba(0,0,0,.55);
         color-scheme: dark;
       }
@@ -43,6 +48,7 @@
       --text: #EDEBE2; --muted: #A19C8A;
       --accent: #4FA189; --accent-strong: #6BBBA2; --accent-soft: color-mix(in srgb, #4FA189 18%, transparent);
       --tier-simple: #7FAF8E; --tier-medium: #DDA85B; --tier-complex: #D0805F; --tier-null: #85806E;
+      --tier-simple-ink: #82b191; --tier-medium-ink: #dda85b; --tier-complex-ink: #d69073; --pill-ink: #948f7e;
       --shadow: rgba(0,0,0,.4); --overlay: rgba(0,0,0,.55);
       color-scheme: dark;
     }
@@ -77,7 +83,10 @@
     .hdr-stats .divider { width: 1px; height: .9em; background: var(--border); }
     .hdr-tiers { display: flex; gap: .3rem; flex-wrap: wrap; }
     .hdr-actions { display: flex; align-items: center; gap: .4rem; flex-shrink: 0; }
-    .panel-toggle { display: none; }
+    /* .btn.panel-toggle (not .panel-toggle alone) so this reliably beats the
+       later, equal-specificity `.btn { display: inline-flex }` rule below —
+       otherwise source order makes .btn win and these stay visible on desktop. */
+    .btn.panel-toggle { display: none; }
 
     .btn {
       display: inline-flex; align-items: center; gap: .35rem; background: var(--surface); border: 1px solid var(--border);
@@ -93,11 +102,11 @@
       font-size: .66rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
       font-family: var(--font-mono); white-space: nowrap;
     }
-    .pill-SIMPLE  { background: color-mix(in srgb, var(--tier-simple) 16%, var(--surface));  color: var(--tier-simple); }
-    .pill-MEDIUM  { background: color-mix(in srgb, var(--tier-medium) 16%, var(--surface));  color: var(--tier-medium); }
-    .pill-COMPLEX { background: color-mix(in srgb, var(--tier-complex) 16%, var(--surface)); color: var(--tier-complex); }
+    .pill-SIMPLE  { background: color-mix(in srgb, var(--tier-simple) 16%, var(--surface));  color: var(--tier-simple-ink); }
+    .pill-MEDIUM  { background: color-mix(in srgb, var(--tier-medium) 16%, var(--surface));  color: var(--tier-medium-ink); }
+    .pill-COMPLEX { background: color-mix(in srgb, var(--tier-complex) 16%, var(--surface)); color: var(--tier-complex-ink); }
     .pill-null,
-    .pill-PINNED  { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+    .pill-PINNED  { background: transparent; color: var(--pill-ink); border: 1px solid var(--border); }
     code { background: var(--surface-2); border: 1px solid var(--border); padding: .1rem .35rem; border-radius: 5px; font-size: .85em; font-family: var(--font-mono); }
 
     .layout {
@@ -115,7 +124,7 @@
        otherwise ate the whole viewport on narrow windows). */
     @media (max-width: 900px) {
       .layout { grid-template-columns: 1fr; }
-      .panel-toggle { display: inline-flex; }
+      .btn.panel-toggle { display: inline-flex; }
       .pane-left, .pane-right {
         position: fixed; top: 0; bottom: 0; width: min(82vw, 300px); z-index: 20;
         transition: transform .18s ease; box-shadow: 0 0 40px var(--shadow);
@@ -172,6 +181,11 @@
     }
     .proj-item:hover .proj-delete, .proj-item:focus-within .proj-delete { opacity: 1; }
     .proj-item .proj-delete:hover { background: var(--surface); color: var(--tier-complex); }
+    /* No hover on touch — keep the delete affordance visible/tappable instead
+       of relying on a hover state that touch input can never trigger. */
+    @media (hover: none), (pointer: coarse) {
+      .proj-item .proj-delete { opacity: 1; }
+    }
 
     .add-project { display: flex; gap: .3rem; margin-top: .6rem; }
     .add-project input {
@@ -352,7 +366,7 @@
 <body>
   <header>
     <div class="hdr-left">
-      <button class="btn icon-only panel-toggle" id="toggle-left" title="Projects">☰</button>
+      <button class="btn icon-only panel-toggle" id="toggle-left" title="Projects" aria-label="Toggle projects panel">☰</button>
       <h1><span class="dot">●</span> manifold-deck</h1>
     </div>
     <div class="hdr-stats" id="hdr-stats"></div>
@@ -360,7 +374,7 @@
       <button class="btn icon-only" id="theme-toggle" title="Toggle light/dark theme">🌙</button>
       <button class="btn" id="import-btn" title="Import Claude Code / Codex CLI history from this machine">⇩ Import</button>
       <button class="btn" id="connections-btn" title="Manage connections">⚙ Connections</button>
-      <button class="btn icon-only panel-toggle" id="toggle-right" title="Files">📁</button>
+      <button class="btn icon-only panel-toggle" id="toggle-right" title="Files" aria-label="Toggle files panel">📁</button>
     </div>
   </header>
 
@@ -552,14 +566,20 @@
       : state.projects;
     document.getElementById('project-list').innerHTML = visible.map(p => `
       <div class="proj-item ${p.id === state.activeId ? 'active' : ''}" data-id="${p.id}">
-        <div class="proj-main">
+        <div class="proj-main" tabindex="0" role="button" aria-label="Select project ${esc(p.name)}">
           <div class="proj-name">${esc(p.name)}</div>
           <div class="cwd" title="${esc(p.cwd)}">${esc(p.cwd)}</div>
         </div>
-        <button class="proj-delete" data-id="${p.id}" title="Delete project and its history">🗑</button>
+        <button class="proj-delete" data-id="${p.id}" title="Delete project and its history" aria-label="Delete project ${esc(p.name)}">🗑</button>
       </div>`).join('') || '<div class="empty-state">No projects match.</div>';
-    document.querySelectorAll('.proj-item .proj-main').forEach(el =>
-      el.addEventListener('click', () => selectProject(parseInt(el.closest('.proj-item').dataset.id))));
+    document.querySelectorAll('.proj-item .proj-main').forEach(el => {
+      el.addEventListener('click', () => selectProject(parseInt(el.closest('.proj-item').dataset.id)));
+      el.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        selectProject(parseInt(el.closest('.proj-item').dataset.id));
+      });
+    });
     document.querySelectorAll('.proj-delete').forEach(el =>
       el.addEventListener('click', e => { e.stopPropagation(); deleteProject(parseInt(el.dataset.id)); }));
   }
@@ -609,7 +629,7 @@
       <li class="${n.is_dir ? 'dir' : ''}">
         ${n.is_dir
           ? `📁 ${esc(n.name)}`
-          : `📄 <span class="file-name" data-path="${esc(n.path)}">${esc(n.name)}</span>`}
+          : `📄 <span class="file-name" data-path="${esc(n.path)}" tabindex="0" role="button">${esc(n.name)}</span>`}
         ${n.children ? renderFileNode(n.children) : ''}
       </li>`).join('') + '</ul>';
   }
@@ -691,7 +711,9 @@
   async function refreshStats() {
     const s = await fetch('/summary').then(r => r.json());
     const tiers = Object.entries(s.by_tier || {}).map(([t, c]) => {
-      const label = t.toLowerCase() === 'null' ? 'UNSET' : t;
+      // Same "not classified by the router" bucket as the per-message
+      // fallback below — keep the label identical in both places.
+      const label = t.toLowerCase() === 'null' ? 'PINNED' : t;
       return `<span class="pill pill-${t}">${esc(label)} ${c}</span>`;
     }).join('');
     document.getElementById('hdr-stats').innerHTML = `
@@ -717,6 +739,13 @@
     const el = e.target.closest('.file-name');
     if (el) openFileViewer(el.dataset.path);
   });
+  document.getElementById('file-tree').addEventListener('keydown', e => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const el = e.target.closest('.file-name');
+    if (!el) return;
+    e.preventDefault();
+    openFileViewer(el.dataset.path);
+  });
 
   async function addProject(cwd) {
     const res = await fetch('/api/projects', {
@@ -737,11 +766,17 @@
     browsePath = data.path;
     document.getElementById('browse-path').textContent = data.path;
     const rows = [];
-    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}">.. (up)</li>`);
-    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}">📁 ${esc(d.name)}</li>`));
+    if (data.parent) rows.push(`<li class="up" data-path="${esc(data.parent)}" tabindex="0" role="option">.. (up)</li>`);
+    rows.push(...data.dirs.map(d => `<li data-path="${esc(d.path)}" tabindex="0" role="option">📁 ${esc(d.name)}</li>`));
     document.getElementById('browse-list').innerHTML = rows.join('') || '<li class="up">(no subfolders)</li>';
-    document.querySelectorAll('#browse-list li[data-path]').forEach(el =>
-      el.addEventListener('click', () => loadBrowse(el.dataset.path)));
+    document.querySelectorAll('#browse-list li[data-path]').forEach(el => {
+      el.addEventListener('click', () => loadBrowse(el.dataset.path));
+      el.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        loadBrowse(el.dataset.path);
+      });
+    });
   }
 
   const newFolderToggle = document.getElementById('new-folder-toggle');
