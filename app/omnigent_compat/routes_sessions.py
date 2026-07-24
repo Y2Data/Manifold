@@ -1,18 +1,24 @@
 """Compatibility routes mapping manifold-deck's projects/turns/connections
 onto Omnigent's /v1/sessions, /v1/agents, /v1/harnesses, /v1/hosts contract.
-Phase 1: read-only session list + detail. Phase 2 (added here): real
-conversation items, per-session agent, read-state.
+Phase 1: read-only session list + detail. Phase 2: real conversation
+items, per-session agent, read-state. Phase 3 (added here): creating a
+session and sending a message for real.
 """
 
 from __future__ import annotations
 
 import asyncio
+import uuid
 
-from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 
-from app.omnigent_compat import ids, mapping
+from app.omnigent_compat import ids, mapping, routes_stream
+from app.routing.backends import BackendError
+from app.routing.router import route
 from app.store import (
     get_default_connection,
+    get_or_create_project,
     get_project,
     get_project_turns,
     list_connections,
@@ -27,6 +33,25 @@ def _fallback_default_connection() -> dict | None:
     """manifold-deck has no per-project connection binding — sessions show
     the global default (preferring claude) as their nominal agent."""
     return get_default_connection("claude") or (list_default_connections() or [None])[0]
+
+
+class NewSessionBody(BaseModel):
+    # Shape verified against the real server (network capture): agent_id/
+    # host_id/labels select which agent+machine a *new* Omnigent session
+    # runs on — manifold-deck has no per-project connection binding yet, so
+    # these are accepted but unused; only workspace (-> project cwd) drives
+    # anything here.
+    agent_id: str | None = None
+    host_id: str | None = None
+    workspace: str
+    labels: dict | None = None
+
+
+@router.post("/v1/sessions", status_code=201)
+async def create_session(body: NewSessionBody):
+    project = get_or_create_project(body.workspace)
+    default_connection = _fallback_default_connection()
+    return mapping.project_to_session_response(project, [], default_connection)
 
 
 @router.get("/v1/sessions")
@@ -116,6 +141,91 @@ async def get_session_items(session_id: str, limit: int = 100, order: str = "asc
         "last_id": items[-1]["id"] if items else None,
         "has_more": False,
     }
+
+
+class SessionEventBody(BaseModel):
+    # Real shape verified via live network capture (this exact endpoint —
+    # POST /v1/sessions/{id}/events — isn't in the OpenAPI spec at all,
+    # same as the /v1/sessions/updates websocket): {"type": "message",
+    # "data": {"role": "user", "content": [{"type": "input_text", "text": "..."}]}}.
+    # Note this is the *documented-nested* `data` shape, unlike the
+    # flattened shape /items actually returns — the two aren't symmetric.
+    type: str
+    data: dict
+
+
+@router.post("/v1/sessions/{session_id}/events", status_code=202)
+async def post_session_event(session_id: str, body: SessionEventBody, background_tasks: BackgroundTasks):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    if body.type != "message":
+        raise HTTPException(400, f"unsupported event type: {body.type!r}")
+    content = body.data.get("content") or []
+    prompt = "\n".join(
+        c.get("text", "") for c in content if isinstance(c, dict) and c.get("text")
+    ).strip()
+    if not prompt:
+        raise HTTPException(400, "empty message")
+
+    # Real response shape is just {"queued": true, "pending_id": "..."} —
+    # the actual result arrives later over /stream, not in this response.
+    # manifold-deck's route() is a blocking call (confirmed: no streaming
+    # backend exists today), so run it in a background task and push the
+    # result as real SSE events once it resolves, rather than blocking
+    # this request for however long the model takes.
+    pending_id = f"pending_{uuid.uuid4().hex}"
+    background_tasks.add_task(_route_and_publish, session_id, project_id, prompt, pending_id)
+    return {"queued": True, "pending_id": pending_id}
+
+
+async def _route_and_publish(session_id: str, project_id: int, prompt: str, pending_id: str) -> None:
+    _publish_status(session_id, "running")
+    routes_stream.publish(
+        session_id,
+        "session.input.consumed",
+        {
+            "sequence_number": None,
+            "type": "session.input.consumed",
+            "data": {
+                "item_id": f"user_{pending_id}",
+                "type": "message",
+                "data": {"role": "user", "content": [{"type": "input_text", "text": prompt}], "agent": None},
+                "created_by": None,
+            },
+            "cleared_pending_id": pending_id,
+        },
+    )
+    try:
+        decisions = await route(project_id, prompt)
+    except BackendError as exc:
+        _publish_status(session_id, "idle", error=str(exc))
+        return
+    for decision in decisions:
+        for item in mapping.turn_to_conversation_items(decision):
+            routes_stream.publish(
+                session_id,
+                "response.output_item.done",
+                {"sequence_number": None, "type": "response.output_item.done", "item": item},
+            )
+    _publish_status(session_id, "idle")
+
+
+def _publish_status(session_id: str, status: str, error: str | None = None) -> None:
+    routes_stream.publish(
+        session_id,
+        "session.status",
+        {
+            "sequence_number": None,
+            "type": "session.status",
+            "conversation_id": session_id,
+            "status": status,
+            "response_id": None,
+            "error": error,
+            "background_task_count": 0 if status == "idle" else None,
+        },
+    )
 
 
 _EMPTY_LIST = {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}

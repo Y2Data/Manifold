@@ -52,7 +52,7 @@ def _build_context(project_id: int, prompt: str) -> str:
     if not history:
         return prompt
     lines = ["Previous turns in this project (for context):"]
-    for t in history[-_HISTORY_TURNS * 2 :]:
+    for t in history:
         if t["role"] == "user":
             lines.append(f"User: {t['content']}")
         else:

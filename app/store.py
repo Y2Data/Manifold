@@ -164,13 +164,17 @@ def add_turn(turn: dict) -> int:
 
 
 def get_project_turns(project_id: int, limit: int = 200) -> list[dict]:
+    """The most recent `limit` turns, oldest-first. Fetches newest-first
+    (`ORDER BY ts DESC LIMIT ?`) then reverses — taking the oldest `limit`
+    rows instead silently drops everything recent once a project has more
+    turns than `limit` (this project has 3000+; caught live)."""
     with _connect() as conn:
         conn.row_factory = sqlite3.Row
         rows = conn.execute(
-            "SELECT * FROM turns WHERE project_id = ? ORDER BY ts ASC LIMIT ?",
+            "SELECT * FROM turns WHERE project_id = ? ORDER BY ts DESC LIMIT ?",
             (project_id, limit),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in reversed(rows)]
 
 
 def recent_decisions(limit: int = 50) -> list[dict]:
