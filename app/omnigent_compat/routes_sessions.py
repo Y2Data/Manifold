@@ -8,7 +8,9 @@ session and sending a message for real.
 from __future__ import annotations
 
 import asyncio
+import socket
 import uuid
+from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
@@ -118,6 +120,39 @@ async def get_session(session_id: str, include_items: bool = True, include_liven
         raise HTTPException(404, "session not found")
     default_connection = _fallback_default_connection()
     turns = get_project_turns(project_id) if include_items else []
+    return mapping.project_to_session_response(project, turns, default_connection)
+
+
+class UpdateSessionBody(BaseModel):
+    # Full real request shape (verified via curl + OpenAPI) — most of these
+    # fields (runner_id, labels, reasoning_effort, model_override,
+    # collaboration_mode, cost_control_mode_override, external_session_id,
+    # terminal_launch_args, archived) have no manifold-deck storage to back
+    # them and are accepted-then-ignored, same as read-state, rather than
+    # half-wired. `title` has an obvious real analog (the project's name)
+    # but isn't wired up either yet — renaming via this endpoint currently
+    # silently doesn't persist; flagged here rather than guessed at.
+    runner_id: str | None = None
+    title: str | None = None
+    labels: dict | None = None
+    reasoning_effort: str | None = None
+    model_override: str | None = None
+    collaboration_mode: str | None = None
+    cost_control_mode_override: str | None = None
+    external_session_id: str | None = None
+    terminal_launch_args: list[str] | None = None
+    archived: bool | None = None
+    silent: bool = False
+
+
+@router.patch("/v1/sessions/{session_id}")
+async def patch_session(session_id: str, body: UpdateSessionBody):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    default_connection = _fallback_default_connection()
+    turns = get_project_turns(project_id)
     return mapping.project_to_session_response(project, turns, default_connection)
 
 
@@ -267,32 +302,194 @@ async def put_session_read_state(session_id: str):
     return None
 
 
+_HARNESS_LABELS = {"claude": "Claude", "codex": "Codex", "http": "HTTP"}
+
+
+def _harness_entry(harness_id: str, model_family: str) -> dict:
+    # Shape verified via curl: {"data": [{id, label, capabilities: {...}}]}
+    # — completely different from an earlier untested guess (a dict keyed
+    # by cli name), which is almost certainly why the new-session agent
+    # picker showed "No agents" despite /v1/agents and /v1/hosts's
+    # configured_harnesses both being correct: the picker couldn't parse
+    # any harness definitions out of the old shape at all. Capabilities
+    # are filled in honestly for what manifold-deck's backends.py actually
+    # does (a one-shot blocking subprocess call) rather than copied from
+    # the real server's richer SDK-based entries — no streaming/interrupt/
+    # resume support exists here, so those are false/cold-only, not
+    # guessed as fully-featured.
+    return {
+        "id": harness_id,
+        "label": _HARNESS_LABELS.get(harness_id, harness_id.title()),
+        "capabilities": {
+            "integration_mode": "cli-subprocess",
+            "elicitation": "none",
+            "resume": "cold-only",
+            "effort": model_family,
+            "model_family": model_family,
+            "auth": "omnigent-credential",
+            "subagents": False,
+            "interrupt": False,
+            "streaming": False,
+            "steering": None,
+            "live_queue": None,
+            "images": None,
+            "compaction": None,
+        },
+    }
+
+
 @router.get("/v1/harnesses")
 async def list_harnesses():
-    """dict of harness-kind -> list of raw objects (loosely typed upstream
-    too — no dedicated schema). One entry per distinct CLI/kind currently
-    configured as a connection."""
-    out: dict[str, list[dict]] = {}
+    seen: dict[str, str] = {}
     for c in list_connections():
-        kind = c.get("cli") if c["kind"] == "subscription_cli" else "http"
-        out.setdefault(kind, []).append({"id": kind, "name": kind})
-    return out
+        harness_id = c.get("cli") if c["kind"] == "subscription_cli" else "http"
+        seen.setdefault(harness_id, harness_id)
+    return {"data": [_harness_entry(h, h) for h in seen]}
 
 
 @router.get("/v1/agents")
 async def list_agents():
-    return [mapping.connection_to_agent(c) for c in list_connections()]
+    # Real shape verified via curl: {"object":"list","data":[...]} — same
+    # wrapper pattern as /v1/sessions etc. An earlier version returned a
+    # bare array, which is almost certainly why the new-session agent
+    # picker showed "No agents" and stayed disabled despite /v1/harnesses
+    # and /v1/hosts's configured_harnesses both being correct: the
+    # frontend couldn't find any items in a shape it wasn't expecting.
+    data = [mapping.connection_to_agent(c) for c in list_connections()]
+    return {"object": "list", "data": data}
+
+
+def _local_host() -> dict:
+    # Real shape verified via curl against the live server: {host_id, name,
+    # owner, status, sandbox_provider, configured_harnesses}. The earlier
+    # version used made-up field names (id/online/runners) that don't
+    # exist on the real object at all — the frontend's new-session picker
+    # reads `configured_harnesses` to know which agents can run on a host,
+    # so a mismatched/empty one is exactly why it reported "no host".
+    return {
+        "host_id": ids.LOCAL_HOST_ID,
+        "name": socket.gethostname(),
+        "owner": "local",
+        "status": "online",
+        "sandbox_provider": None,
+        "configured_harnesses": mapping.build_configured_harnesses(list_connections()),
+    }
 
 
 @router.get("/v1/hosts")
 async def list_hosts():
-    return {
-        "hosts": [
+    return {"hosts": [_local_host()]}
+
+
+@router.get("/v1/hosts/{host_id}")
+async def get_host(host_id: str):
+    if host_id != ids.LOCAL_HOST_ID:
+        raise HTTPException(404, "host not found")
+    return _local_host()
+
+
+def _list_host_dir(path: Path, limit: int) -> dict:
+    try:
+        children = sorted(path.iterdir(), key=lambda p: p.name.lower())
+    except (PermissionError, FileNotFoundError):
+        raise HTTPException(404, "path not found or not readable")
+    data = []
+    for p in children[:limit]:
+        try:
+            stat = p.stat()
+        except OSError:
+            continue
+        data.append(
             {
-                "id": ids.LOCAL_HOST_ID,
-                "name": "local",
-                "online": True,
-                "runners": [{"id": ids.LOCAL_RUNNER_ID, "online": True}],
+                "name": p.name,
+                "path": str(p),
+                "type": "directory" if p.is_dir() else "file",
+                "bytes": None if p.is_dir() else stat.st_size,
+                "modified_at": int(stat.st_mtime),
             }
-        ]
-    }
+        )
+    return {"object": "list", "data": data, "has_more": len(children) > limit}
+
+
+@router.get("/v1/hosts/{host_id}/filesystem")
+async def get_host_filesystem_root(host_id: str, limit: int = 20):
+    # Used by the new-session folder picker. Real behavior (verified via
+    # curl): no path param exists on this bare route at all — it always
+    # lists $HOME, and browsing elsewhere goes through the *other* route
+    # below (/filesystem/{path}, a path segment).
+    if host_id != ids.LOCAL_HOST_ID:
+        raise HTTPException(404, "host not found")
+    return _list_host_dir(Path.home(), limit)
+
+
+@router.get("/v1/hosts/{host_id}/filesystem/{path:path}")
+async def get_host_filesystem_path(host_id: str, path: str, limit: int = 20):
+    # Real semantics (from the live server's own docstring): the client
+    # sends an absolute path with FastAPI's leading "/" stripped by the
+    # :path converter, so it's re-added here; "~" is expanded server-side
+    # too. Same "whole local filesystem, single local user" posture this
+    # project already uses for app/routers/projects.py's /browse endpoint
+    # (this server only binds to 127.0.0.1).
+    if host_id != ids.LOCAL_HOST_ID:
+        raise HTTPException(404, "host not found")
+    raw = path if path.startswith("~") else "/" + path
+    target = Path(raw).expanduser()
+    if not target.is_dir():
+        raise HTTPException(404, "path not found or not a directory")
+    return _list_host_dir(target, limit)
+
+
+@router.get("/v1/hosts/{host_id}/worktrees")
+async def get_host_worktrees(host_id: str, path: str):
+    """Real shape verified via curl — and it's genuinely backed by `git
+    worktree list --porcelain` on the given path (confirmed: it surfaced
+    an actual worktree from a different session working on this same
+    repo). Implemented for real rather than stubbed empty, since it's a
+    cheap read-only git command and the new-session worktree picker is
+    useless without it."""
+    if host_id != ids.LOCAL_HOST_ID:
+        raise HTTPException(404, "host not found")
+    if not Path(path).is_dir():
+        raise HTTPException(400, "path is not a directory")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "git", "-C", path, "worktree", "list", "--porcelain",
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5.0)
+    except (OSError, asyncio.TimeoutError):
+        return {"object": "list", "data": []}
+    if proc.returncode != 0:
+        return {"object": "list", "data": []}
+
+    data: list[dict] = []
+    current: dict | None = None
+    for line in stdout.decode(errors="replace").splitlines():
+        if not line.strip():
+            if current:
+                data.append(current)
+                current = None
+        elif line.startswith("worktree "):
+            current = {
+                "path": line[len("worktree ") :],
+                "branch": None,
+                "is_main": len(data) == 0,
+                "detached": False,
+            }
+        elif current is not None and line.startswith("branch "):
+            current["branch"] = line[len("branch ") :].removeprefix("refs/heads/")
+        elif current is not None and line == "detached":
+            current["detached"] = True
+    if current:
+        data.append(current)
+    return {"object": "list", "data": data}
+
+
+@router.get("/v1/runners")
+async def list_runners():
+    # Real shape verified via curl: {"data": [{"runner_id", "online",
+    # "harnesses": [...]}]}. Distinct from /v1/hosts's configured_harnesses
+    # dict — this is the flat list of harness names actually available,
+    # used elsewhere in the new-session flow.
+    harnesses = sorted(k for k, v in mapping.build_configured_harnesses(list_connections()).items() if v)
+    return {"data": [{"runner_id": ids.LOCAL_RUNNER_ID, "online": True, "harnesses": harnesses}]}

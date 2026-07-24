@@ -14,6 +14,42 @@ _TIER_RATIONALE = {
     "COMPLEX": "Classified as complex — fanned out to every default connection.",
 }
 
+# The exact key set the real server's GET /v1/hosts/{id} returns under
+# configured_harnesses (verified via curl against the live instance) — the
+# frontend's new-session picker uses this to decide which agents/harnesses
+# are even offerable on a given host. manifold-deck has no such fixed
+# catalog, so this list exists purely to match the real shape; every key
+# defaults false except the small subset actually backed by a configured
+# connection (see _HARNESS_ALIASES / build_configured_harnesses below).
+_KNOWN_HARNESS_KEYS = [
+    "native-antigravity", "pi", "native-cursor", "kimi-code", "native-kiro", "copilot",
+    "kimi-native", "codex-native", "claude-sdk", "kimi", "native-hermes", "qwen-code",
+    "claude_sdk", "hermes-native", "antigravity", "agents_sdk", "goose-native", "qwen-native",
+    "codex", "native-codex", "open-responses", "native-kimi", "native-opencode", "cursor-native",
+    "goose", "cursor", "antigravity-native", "openai-agents", "native-qwen", "openai-agents-sdk",
+    "hermes", "pi-native", "github-copilot", "qwen", "native-claude", "opencode-native",
+    "google-antigravity", "acp", "native-pi", "agy", "claude", "opencode", "native-goose",
+    "kiro-native", "claude-native",
+]
+
+# manifold-deck cli name -> the subset of the real catalog's aliases that
+# genuinely apply (native CLI usage only — manifold shells out to `claude
+# -p`/`codex exec` directly, not via an SDK, so the *-sdk/agents_sdk
+# variants stay false even when claude/codex are configured).
+_HARNESS_ALIASES = {
+    "claude": {"claude", "claude-native", "native-claude"},
+    "codex": {"codex", "codex-native", "native-codex"},
+    "kimi": {"kimi", "kimi-native", "kimi-code", "native-kimi"},
+}
+
+
+def build_configured_harnesses(connections: list[dict]) -> dict[str, bool]:
+    configured_clis = {c.get("cli") for c in connections if c["kind"] == "subscription_cli"}
+    enabled: set[str] = set()
+    for cli in configured_clis:
+        enabled |= _HARNESS_ALIASES.get(cli, set())
+    return {key: key in enabled for key in _KNOWN_HARNESS_KEYS}
+
 
 def connection_to_agent(connection: dict) -> dict:
     """-> AgentObject. `harness` is the frontend's signal for which kind of
