@@ -5,7 +5,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app.omnigent_compat import routes_core, routes_sessions
+from app.omnigent_compat import routes_core, routes_resources, routes_sessions, routes_stream, routes_stubs
 from app.routers import chat, connections, health, imports, projects
 from app.store import get_or_create_project, seed_default_connections
 
@@ -17,6 +17,9 @@ app.include_router(connections.router)
 app.include_router(imports.router)
 app.include_router(routes_core.router)
 app.include_router(routes_sessions.router)
+app.include_router(routes_stream.router)
+app.include_router(routes_resources.router)
+app.include_router(routes_stubs.router)
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
 
 # Vendored Omnigent web UI (see app/omnigent_compat/VENDORED.md) — mounted at

@@ -92,26 +92,29 @@ def project_to_session_response(project: dict, turns: list[dict], default_connec
 def turn_to_conversation_items(turn: dict) -> list[dict]:
     """turns row -> list of ConversationItem dicts.
 
-    A user turn is one MessageData item. An assistant turn becomes a
-    RoutingDecisionData item (surfacing manifold's own tier/backend/cost —
-    a near-exact fit for what this Omnigent item type exists for) followed
-    by the MessageData item with the actual response text.
+    A user turn is one message item. An assistant turn becomes a
+    routing_decision item (surfacing manifold's own tier/backend/cost — a
+    near-exact fit for what this Omnigent item type exists for) followed
+    by the message item with the actual response text.
+
+    Shape verified against the real Omnigent server's actual
+    `/v1/sessions/{id}/items` responses (`curl` against the live instance)
+    rather than trusting the OpenAPI schema alone — the runtime wire format
+    flattens each item's typed fields directly onto the item (no nested
+    `data` wrapper, despite `components.schemas.ConversationItem` in the
+    spec showing one). E.g. a real message item is exactly
+    `{id, response_id, type:"message", status, role, content, model}`.
     """
     response_id = turn.get("fanout_group") or ids.item_id(turn["id"])
     if turn["role"] == "user":
         return [
             {
                 "id": ids.item_id(turn["id"]),
+                "response_id": response_id,
                 "type": "message",
                 "status": "completed",
-                "response_id": response_id,
-                "created_at": int(turn["ts"]),
-                "created_by": None,
-                "data": {
-                    "role": "user",
-                    "content": [{"type": "input_text", "text": turn["content"]}],
-                    "model": None,
-                },
+                "role": "user",
+                "content": [{"type": "input_text", "text": turn["content"]}],
             }
         ]
 
@@ -121,32 +124,24 @@ def turn_to_conversation_items(turn: dict) -> list[dict]:
         items.append(
             {
                 "id": f"route_{turn['id']}",
+                "response_id": response_id,
                 "type": "routing_decision",
                 "status": "completed",
-                "response_id": response_id,
-                "created_at": int(turn["ts"]),
-                "created_by": None,
-                "data": {
-                    "model": turn.get("model") or "unknown",
-                    "applied": True,
-                    "rationale": _TIER_RATIONALE.get(tier, f"Classified as {tier}."),
-                    "agent": turn.get("backend"),
-                },
+                "model": turn.get("model") or "unknown",
+                "applied": True,
+                "rationale": _TIER_RATIONALE.get(tier, f"Classified as {tier}."),
+                "agent": turn.get("backend"),
             }
         )
     items.append(
         {
             "id": ids.item_id(turn["id"]),
+            "response_id": response_id,
             "type": "message",
             "status": "completed",
-            "response_id": response_id,
-            "created_at": int(turn["ts"]),
-            "created_by": None,
-            "data": {
-                "role": "assistant",
-                "content": [{"type": "output_text", "text": turn["content"]}],
-                "model": turn.get("model"),
-            },
+            "role": "assistant",
+            "content": [{"type": "output_text", "text": turn["content"]}],
+            "model": turn.get("model"),
         }
     )
     return items

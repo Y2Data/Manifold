@@ -1,9 +1,12 @@
 """Compatibility routes mapping manifold-deck's projects/turns/connections
 onto Omnigent's /v1/sessions, /v1/agents, /v1/harnesses, /v1/hosts contract.
-Phase 1 (this file, initial cut): read-only session list + detail.
+Phase 1: read-only session list + detail. Phase 2 (added here): real
+conversation items, per-session agent, read-state.
 """
 
 from __future__ import annotations
+
+import asyncio
 
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 
@@ -65,13 +68,19 @@ async def session_updates_ws(websocket: WebSocket):
     (new/renamed/deleted sessions elsewhere). Not in the OpenAPI schema
     (WebSockets don't show up there) — found via live network capture,
     where rejecting it with the default 403 surfaced as a console error.
-    manifold-deck has no push-update source yet, so this just accepts and
-    holds the connection open rather than erroring; real push updates are
-    a Phase 4 (streaming) concern once the SSE session stream exists."""
+
+    Needs to proactively *send* something periodically, not just wait to
+    receive: an earlier version only read incoming frames (which the
+    client never sends — it just listens), so the client's own "no frame
+    in 70000ms" watchdog kept reconnecting. manifold-deck has no push
+    source for session-list changes yet, so this just heartbeats to keep
+    the connection considered alive; real push updates are a later
+    streaming concern once /stream carries real events."""
     await websocket.accept()
     try:
         while True:
-            await websocket.receive_text()
+            await asyncio.sleep(30.0)
+            await websocket.send_json({"type": "ping"})
     except WebSocketDisconnect:
         pass
 
@@ -85,6 +94,67 @@ async def get_session(session_id: str, include_items: bool = True, include_liven
     default_connection = _fallback_default_connection()
     turns = get_project_turns(project_id) if include_items else []
     return mapping.project_to_session_response(project, turns, default_connection)
+
+
+@router.get("/v1/sessions/{session_id}/items")
+async def get_session_items(session_id: str, limit: int = 100, order: str = "asc"):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    turns = get_project_turns(project_id, limit=limit)
+    items: list[dict] = []
+    for turn in turns:
+        items.extend(mapping.turn_to_conversation_items(turn))
+    if order == "desc":
+        items = list(reversed(items))
+    items = items[:limit]
+    return {
+        "object": "list",
+        "data": items,
+        "first_id": items[0]["id"] if items else None,
+        "last_id": items[-1]["id"] if items else None,
+        "has_more": False,
+    }
+
+
+_EMPTY_LIST = {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
+
+
+@router.get("/v1/sessions/{session_id}/child_sessions")
+async def get_child_sessions(session_id: str):
+    # manifold-deck has no sub-agent/child-session concept — always empty,
+    # matching the real server's own shape (verified via curl) for a
+    # session with no children rather than guessing.
+    return _EMPTY_LIST
+
+
+@router.get("/v1/sessions/{session_id}/resources/terminals")
+async def get_session_terminals(session_id: str, order: str = "asc", limit: int = 1000):
+    # No terminal/PTY concept in manifold-deck (Phase 6 stub territory) —
+    # empty list so the UI's terminal panel just shows "none" instead of
+    # erroring.
+    return _EMPTY_LIST
+
+
+@router.get("/v1/sessions/{session_id}/agent")
+async def get_session_agent(session_id: str):
+    project_id = ids.project_id_from_session(session_id)
+    if project_id is None or get_project(project_id) is None:
+        raise HTTPException(404, "session not found")
+    connection = _fallback_default_connection()
+    if connection is None:
+        raise HTTPException(404, "no connection configured")
+    return mapping.connection_to_agent(connection)
+
+
+@router.put("/v1/sessions/{session_id}/read-state", status_code=204)
+async def put_session_read_state(session_id: str):
+    # manifold-deck has no per-user read tracking (single_user mode) — the
+    # client already has the optimistic state and re-reads on the next
+    # GET /v1/sessions poll, per the real endpoint's own docstring; nothing
+    # to persist here.
+    return None
 
 
 @router.get("/v1/harnesses")
