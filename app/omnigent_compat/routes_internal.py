@@ -47,16 +47,19 @@ async def pretooluse(body: PreToolUseBody):
     session_id = ids.session_id(body.project_id)
     elicitation = permissions.list_pending_for_project(body.project_id)
     entry = next((e for e in elicitation if e["elicitation_id"] == elicitation_id), None)
-    routes_stream.publish(session_id, "elicitation_request", entry or {})
+    # Real event name confirmed via raw SSE capture against the live Omnigent
+    # server (`event: response.elicitation_request`, same nested/snake_case
+    # `data` shape as GET .../sessions/{id}'s `pending_elicitations` entries)
+    # — NOT the flat camelCase object a downstream JS reducer builds from it.
+    # There's no real `elicitation_resolved` push either: the real server
+    # doesn't emit one on resolve, it just continues with normal
+    # response.output_item.done/session.status events once the underlying
+    # tool call proceeds — matches _route_and_publish's own behavior here.
+    routes_stream.publish(session_id, "response.elicitation_request", entry or {})
 
     try:
         decision = await asyncio.wait_for(future, timeout=_MAX_WAIT_S)
     except asyncio.TimeoutError:
         permissions.resolve_pending(elicitation_id, "decline")
         decision = {"behavior": "deny"}
-    routes_stream.publish(
-        session_id,
-        "elicitation_resolved",
-        {"sequence_number": None, "type": "elicitation_resolved", "elicitation_id": elicitation_id, "decision": decision},
-    )
     return decision

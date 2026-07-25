@@ -277,8 +277,10 @@ class ElicitationResolveBody(BaseModel):
     content: dict | None = None
 
 
-@router.post("/v1/sessions/{session_id}/elicitations/{elicitation_id}/resolve")
+@router.post("/v1/sessions/{session_id}/elicitations/{elicitation_id}/resolve", status_code=202)
 async def resolve_elicitation(session_id: str, elicitation_id: str, body: ElicitationResolveBody):
+    # Real status code (202) and response body confirmed via live network
+    # capture against the real Omnigent server's own resolve click.
     if permissions.find_project_id_for_elicitation(elicitation_id) is None:
         raise HTTPException(404, "elicitation not found")
     if body.action not in ("accept", "decline"):
@@ -286,7 +288,7 @@ async def resolve_elicitation(session_id: str, elicitation_id: str, body: Elicit
     ok = permissions.resolve_pending(elicitation_id, body.action, body.content)
     if not ok:
         raise HTTPException(409, "elicitation already resolved")
-    return {"ok": True}
+    return {"queued": False}
 
 
 _EMPTY_LIST = {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
