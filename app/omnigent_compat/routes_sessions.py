@@ -19,8 +19,8 @@ from app.omnigent_compat import ids, mapping, permissions, routes_stream
 from app.routing.backends import BackendError
 from app.routing.router import route
 from app.store import (
+    create_project,
     get_default_connection,
-    get_or_create_project,
     get_project,
     get_project_turns,
     list_connections,
@@ -51,7 +51,11 @@ class NewSessionBody(BaseModel):
 
 @router.post("/v1/sessions", status_code=201)
 async def create_session(body: NewSessionBody):
-    project = get_or_create_project(body.workspace)
+    # Always a fresh project row (see store.create_project) — "New session"
+    # should start a distinct conversation even in an already-used folder,
+    # matching the real Omnigent UI rather than silently resuming whatever
+    # project already lives at that cwd.
+    project = create_project(body.workspace)
     default_connection = _fallback_default_connection()
     return mapping.project_to_session_response(project, [], default_connection)
 

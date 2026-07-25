@@ -73,6 +73,44 @@ CREATE TABLE IF NOT EXISTS imported_files (
 def _connect() -> sqlite3.Connection:
     _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(_DB_PATH)
+    # projects.cwd used to be UNIQUE, forcing one project per folder.
+    # get_or_create_project()'s dedup is done in Python (SELECT before
+    # INSERT below), never relied on this DB constraint — so dropping it
+    # changes nothing for the dashboard's "Add project" flow or chat_import,
+    # it only allows create_project() (below) to make genuine duplicates for
+    # the Omnigent-compat vendored UI's "New session", which — like the real
+    # Omnigent UI — expects every click to start a fresh, distinct
+    # conversation even in an already-used folder. Must run with foreign
+    # keys still off (the sqlite3 default) since it recreates a table
+    # `turns` has a FOREIGN KEY on.
+    old_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'"
+    ).fetchone()
+    if old_sql and old_sql[0] and "UNIQUE" in old_sql[0]:
+        # legacy_alter_table: without it, SQLite's RENAME TABLE silently
+        # rewrites turns' own FOREIGN KEY clause to follow "projects" to its
+        # new name, which then dangles once the renamed-away table is
+        # dropped below (hit this live: turns ended up with `REFERENCES
+        # "projects_old_unique_cwd"(id)`, a table that no longer existed,
+        # breaking every delete/insert touching turns).
+        conn.execute("PRAGMA legacy_alter_table = ON")
+        conn.executescript(
+            """
+            ALTER TABLE projects RENAME TO projects_old_unique_cwd;
+            CREATE TABLE projects (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cwd TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                last_used_at REAL NOT NULL,
+                starred INTEGER NOT NULL DEFAULT 0
+            );
+            INSERT INTO projects (id, cwd, name, created_at, last_used_at, starred)
+                SELECT id, cwd, name, created_at, last_used_at, starred FROM projects_old_unique_cwd;
+            DROP TABLE projects_old_unique_cwd;
+            """
+        )
+        conn.execute("PRAGMA legacy_alter_table = OFF")
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)
     # Lightweight migration for DBs created before cli_argv_template/cli_output_mode
@@ -104,6 +142,24 @@ def get_or_create_project(cwd: str) -> dict:
             ).fetchone()
         else:
             conn.execute("UPDATE projects SET last_used_at = ? WHERE id = ?", (now, row["id"]))
+        return dict(row)
+
+
+def create_project(cwd: str) -> dict:
+    """Unconditional insert — unlike get_or_create_project, always makes a
+    new row even if one already exists for this cwd. For the Omnigent-compat
+    vendored UI's POST /v1/sessions ("New session"), which should always
+    start a fresh, distinct conversation the way the real Omnigent UI does,
+    not silently resume whatever project already lives at that folder."""
+    now = __import__("time").time()
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        name = Path(cwd).name or cwd
+        cur = conn.execute(
+            "INSERT INTO projects (cwd, name, created_at, last_used_at) VALUES (?, ?, ?, ?)",
+            (cwd, name, now, now),
+        )
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (cur.lastrowid,)).fetchone()
         return dict(row)
 
 
