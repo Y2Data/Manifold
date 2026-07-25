@@ -20,12 +20,14 @@ from app.routing.backends import BackendError
 from app.routing.router import route
 from app.store import (
     create_project,
+    delete_project,
     get_default_connection,
     get_project,
     get_project_turns,
     list_connections,
     list_default_connections,
     list_projects,
+    rename_project,
 )
 
 router = APIRouter()
@@ -137,9 +139,8 @@ class UpdateSessionBody(BaseModel):
     # collaboration_mode, cost_control_mode_override, external_session_id,
     # terminal_launch_args, archived) have no manifold-deck storage to back
     # them and are accepted-then-ignored, same as read-state, rather than
-    # half-wired. `title` has an obvious real analog (the project's name)
-    # but isn't wired up either yet — renaming via this endpoint currently
-    # silently doesn't persist; flagged here rather than guessed at.
+    # half-wired. `title` maps onto the project's own name (see
+    # store.rename_project) since that's an obvious, real analog.
     runner_id: str | None = None
     title: str | None = None
     labels: dict | None = None
@@ -159,10 +160,44 @@ async def patch_session(session_id: str, body: UpdateSessionBody):
     project = get_project(project_id) if project_id is not None else None
     if project is None:
         raise HTTPException(404, "session not found")
+    if body.title is not None:
+        project = rename_project(project_id, body.title)
     default_connection = _fallback_default_connection()
     turns = get_project_turns(project_id)
     pending = permissions.list_pending_for_project(project_id)
     return mapping.project_to_session_response(project, turns, default_connection, pending)
+
+
+@router.delete("/v1/sessions/{session_id}")
+async def delete_session(session_id: str):
+    # Real shape verified via OpenAPI spec: ConversationDeleted
+    # {"id","object":"conversation.deleted","deleted":true}.
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    delete_project(project_id)
+    return {"id": session_id, "object": "conversation.deleted", "deleted": True}
+
+
+class AutoTitleBody(BaseModel):
+    # Real shape (OpenAPI: AutomaticSessionRenameRequest) — the *caller*
+    # proposes a title (usually agent-generated) and the server decides
+    # whether to actually apply it. manifold-deck sessions are always
+    # "top-level" (no sub-agent/child-session concept), so the only real
+    # gating condition (AutomaticSessionRenameResponse.reason ==
+    # "not_top_level") never applies here — always rename if given a title.
+    title: str
+
+
+@router.post("/v1/sessions/{session_id}/auto-title")
+async def auto_title_session(session_id: str, body: AutoTitleBody):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    rename_project(project_id, body.title)
+    return {"renamed": True, "title": body.title, "reason": None}
 
 
 @router.get("/v1/sessions/{session_id}/items")

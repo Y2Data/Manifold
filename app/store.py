@@ -204,6 +204,14 @@ def set_project_starred(project_id: int, starred: bool) -> dict | None:
         return dict(row) if row else None
 
 
+def rename_project(project_id: int, name: str) -> dict | None:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("UPDATE projects SET name = ? WHERE id = ?", (name, project_id))
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def add_turn(turn: dict) -> int:
     with _connect() as conn:
         cur = conn.execute(

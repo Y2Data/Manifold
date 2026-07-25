@@ -21,13 +21,7 @@ class WriteFileBody(BaseModel):
     encoding: str = "utf-8"
 
 
-@router.get("/v1/sessions/{session_id}/resources/environments/default")
-async def get_default_environment(session_id: str):
-    project_id = ids.project_id_from_session(session_id)
-    project = get_project(project_id) if project_id is not None else None
-    if project is None:
-        raise HTTPException(404, "session not found")
-    cwd = project["cwd"]
+def _default_environment_object(session_id: str, cwd: str) -> dict:
     # Shape verified against the real server (curl): id/object/type/name +
     # a loosely-typed metadata dict. "caller_process" is the real server's
     # value for "this is the process's own working directory, not a
@@ -46,6 +40,58 @@ async def get_default_environment(session_id: str):
             "home": cwd,
         },
     }
+
+
+@router.get("/v1/sessions/{session_id}/resources/environments/default")
+async def get_default_environment(session_id: str):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    return _default_environment_object(session_id, project["cwd"])
+
+
+@router.get("/v1/sessions/{session_id}/resources/environments")
+async def list_environments(session_id: str):
+    # manifold-deck has exactly one environment per session — the project's
+    # own cwd — so the list is always this same single entry, matching the
+    # real SessionResourcePaginatedList shape (object/data/first_id/last_id/
+    # has_more).
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    env = _default_environment_object(session_id, project["cwd"])
+    return {"object": "list", "data": [env], "first_id": env["id"], "last_id": env["id"], "has_more": False}
+
+
+@router.get("/v1/sessions/{session_id}/resources")
+async def list_resources(session_id: str):
+    # Generic top-level resource listing (per SessionResourcePaginatedList)
+    # — every resource kind manifold-deck actually backs (environment,
+    # filesystem entries) has its own dedicated route above; nothing else
+    # (terminals beyond the empty list already served, uploaded "files" as
+    # a distinct concept from the environment filesystem) is real here, so
+    # an honest empty list rather than duplicating the environment entry
+    # under a second path.
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    return {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
+
+
+@router.get("/v1/sessions/{session_id}/resources/files")
+async def list_session_files(session_id: str):
+    # "Files" here is a distinct real-server concept from the environment
+    # filesystem above — standalone uploaded attachments (per POST
+    # .../resources/files). manifold-deck has no upload/attachment
+    # storage, so an honest empty list rather than a placeholder.
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    return {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
 
 
 @router.get("/v1/sessions/{session_id}/resources/environments/default/changes")
