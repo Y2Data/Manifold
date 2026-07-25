@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import sqlite3
 import uuid
 from pathlib import Path
 
@@ -280,6 +281,13 @@ async def _route_and_publish(session_id: str, project_id: int, prompt: str, pend
         decisions = await route(project_id, prompt)
     except BackendError as exc:
         _publish_status(session_id, "idle", error=str(exc))
+        return
+    except sqlite3.IntegrityError:
+        # The project was deleted while this response was still in flight
+        # (e.g. it was waiting on a tool-permission approval that outlived
+        # the user deleting the session) — add_turn's FOREIGN KEY to
+        # projects(id) fails since the row is gone. Nothing meaningful left
+        # to persist or publish to; just stop rather than crash.
         return
     for decision in decisions:
         for item in mapping.turn_to_conversation_items(decision):
