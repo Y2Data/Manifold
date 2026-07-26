@@ -6,12 +6,13 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.omnigent_compat import routes_core, routes_internal, routes_resources, routes_sessions, routes_stream, routes_stubs
-from app.routers import chat, connections, health, imports, projects
+from app.routers import browse, chat, connections, health, imports, projects
 from app.store import get_or_create_project, seed_default_connections
 
 app = FastAPI(title="manifold-deck")
 app.include_router(health.router)
 app.include_router(chat.router)
+app.include_router(browse.router)
 app.include_router(projects.router)
 app.include_router(connections.router)
 app.include_router(imports.router)

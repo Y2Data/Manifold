@@ -65,11 +65,54 @@ already handles for free. This just shells out to the already-authenticated `cla
 CLIs directly (`claude -p ... --model <tier> --output-format json`, reusing OAuth/keychain
 auth — never pass `--bare`, that flag forces API-key-only auth and defeats the point).
 
+## Web research (optional)
+
+A standalone service — separate process, opt-in dependencies — that gives the dashboard a
+Perplexity-style "search the web, read pages, write a cited answer" mode, without touching
+the `connections` table/router that the rest of manifold-deck uses for models. See
+`browser_service/` for the code.
+
+```bash
+./manifold browser-bootstrap   # one-time: installs playwright + trafilatura + a real Chromium binary
+./manifold browser-up          # starts it at http://localhost:8090
+```
+
+Then check the "web research" box next to the composer in the dashboard, or call it
+directly:
+
+```bash
+curl -X POST http://localhost:8090/research \
+  -H 'Content-Type: application/json' \
+  -d '{"question":"What is the capital of France?"}'
+```
+
+How it works: `browser_service/search.py` scrapes DuckDuckGo's HTML results page (no search
+API key needed — matches this project's "no new API keys" ethos, and works out of the box);
+`fetch.py` tries a plain HTTP GET first and only escalates to a real headless Chromium
+(`playwright`) when the page turns out to need JS rendering; `extract.py` pulls clean article
+text out via `trafilatura`; `synthesize.py` writes the cited answer by reusing the same
+subscription-authenticated `claude -p` call the classifier already uses internally — no
+second API key, no second auth path.
+
+**Honest caveat**: scraping DuckDuckGo's HTML endpoint is automated access to a service whose
+own ToS doesn't explicitly permit it. It's meaningfully more tolerant of low-volume,
+single-user, sequential traffic than Google (which CAPTCHA-gates non-browser traffic almost
+immediately) — fine for a personal local research tool used at low volume, not something to
+scale up or parallelize. If you outgrow that, point `browser_service/search.py` at a paid
+search API instead (same function signature, no caller changes needed).
+
+Deliberately out of scope for this pass (see `browser_service/` for where each would slot
+in): clicking/filling forms or otherwise acting on pages, logging into sites, caching search
+results, and multi-hop "search again based on what I found" loops. Today's loop is
+search → read → cite, once, per question.
+
 ## Other commands
 
 ```bash
-./manifold status  # is it running?
-./manifold down     # stop it
-./manifold dev      # run in foreground with live-reload, for development
-./manifold test     # run the test suite
+./manifold status          # is it running?
+./manifold down             # stop it
+./manifold dev              # run in foreground with live-reload, for development
+./manifold test             # run the test suite
+./manifold browser-status   # is the web research service running?
+./manifold browser-down     # stop it
 ```

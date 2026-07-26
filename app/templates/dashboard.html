@@ -105,6 +105,7 @@
     .pill-SIMPLE  { background: color-mix(in srgb, var(--tier-simple) 16%, var(--surface));  color: var(--tier-simple-ink); }
     .pill-MEDIUM  { background: color-mix(in srgb, var(--tier-medium) 16%, var(--surface));  color: var(--tier-medium-ink); }
     .pill-COMPLEX { background: color-mix(in srgb, var(--tier-complex) 16%, var(--surface)); color: var(--tier-complex-ink); }
+    .pill-BROWSE  { background: color-mix(in srgb, var(--tier-medium) 16%, var(--surface));  color: var(--tier-medium-ink); }
     .pill-null,
     .pill-PINNED  { background: transparent; color: var(--pill-ink); border: 1px solid var(--border); }
     code { background: var(--surface-2); border: 1px solid var(--border); padding: .1rem .35rem; border-radius: 5px; font-size: .85em; font-family: var(--font-mono); }
@@ -249,6 +250,13 @@
     .advanced-toggle:hover { color: var(--text); }
     .advanced-row { display: none; gap: .5rem; margin-top: .55rem; }
     .advanced-row.open { display: flex; }
+    .research-toggle {
+      font-size: .72rem; color: var(--muted); font-family: var(--font-mono);
+      text-transform: uppercase; letter-spacing: .04em; display: inline-flex;
+      align-items: center; gap: .3rem; cursor: pointer; user-select: none;
+    }
+    .research-toggle:hover { color: var(--text); }
+    .research-toggle input { margin: 0; cursor: pointer; }
     .advanced-row select {
       background: var(--bg); color: var(--text); border: 1px solid var(--border);
       border-radius: var(--radius-sm); padding: .38rem .55rem; font-size: .76rem; font-family: var(--font-mono);
@@ -404,6 +412,9 @@
         <textarea id="prompt" placeholder="Ask something — it'll be classified and routed live."></textarea>
         <div class="composer-row">
           <button id="send">Send</button>
+          <label class="research-toggle" title="Search the web and synthesize a cited answer, via the standalone browser service (./manifold browser-up)">
+            <input type="checkbox" id="research-mode"> web research
+          </label>
           <span class="advanced-toggle" id="advanced-toggle">advanced</span>
           <span id="status"></span>
         </div>
@@ -901,19 +912,25 @@
     const connIdRaw = document.getElementById('backend-override').value;
     const connection_id = connIdRaw ? parseInt(connIdRaw) : null;
     const tier = document.getElementById('tier-override').value || null;
+    const researchMode = document.getElementById('research-mode').checked;
     const prompt = promptEl.value.trim();
     if (!prompt || !state.activeId) return;
 
     sendBtn.disabled = true;
-    statusEl.textContent = 'routing…';
+    statusEl.textContent = researchMode ? 'searching the web…' : 'routing…';
     try {
-      const res = await fetch('/v1/chat/completions', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          project_id: state.activeId, connection_id, tier,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      });
+      const res = researchMode
+        ? await fetch('/api/browse', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ project_id: state.activeId, question: prompt }),
+          })
+        : await fetch('/v1/chat/completions', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              project_id: state.activeId, connection_id, tier,
+              messages: [{ role: 'user', content: prompt }],
+            }),
+          });
       if (!res.ok) throw new Error(await res.text());
       promptEl.value = '';
       statusEl.textContent = '';
