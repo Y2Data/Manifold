@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# manifold-deck's command entrypoint. Usage: ./manifold <bootstrap|up|down|status|dev|test>
+# manifold-deck's command entrypoint.
+# Usage: ./manifold <bootstrap|up|down|status|dev|test|browser-bootstrap|browser-up|browser-down|browser-status>
 set -euo pipefail
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
@@ -7,14 +8,20 @@ cmd="${1:-}"
 shift || true
 
 case "$cmd" in
-  bootstrap) exec bash scripts/bootstrap.sh ;;
-  up)        exec bash scripts/up.sh ;;
-  down)      exec bash scripts/down.sh ;;
-  status)    exec bash scripts/status.sh ;;
-  dev)       exec .venv/bin/uvicorn app.main:app --reload --port "${UI_PORT:-8080}" ;;
-  test)      exec .venv/bin/python -m pytest "$@" ;;
+  bootstrap)         exec bash scripts/bootstrap.sh ;;
+  up)                exec bash scripts/up.sh ;;
+  down)              exec bash scripts/down.sh ;;
+  status)            exec bash scripts/status.sh ;;
+  dev)               exec .venv/bin/uvicorn app.main:app --reload --port "${UI_PORT:-8080}" ;;
+  test)              exec .venv/bin/python -m pytest "$@" ;;
+  # Standalone browsing/research service — separate process, opt-in deps
+  # (Playwright + a real Chromium binary). See browser_service/.
+  browser-bootstrap) exec bash scripts/browser-bootstrap.sh ;;
+  browser-up)        exec bash scripts/browser-up.sh ;;
+  browser-down)      exec bash scripts/browser-down.sh ;;
+  browser-status)    exec bash scripts/browser-status.sh ;;
   *)
-    echo "Usage: ./manifold <bootstrap|up|down|status|dev|test>" >&2
+    echo "Usage: ./manifold <bootstrap|up|down|status|dev|test|browser-bootstrap|browser-up|browser-down|browser-status>" >&2
     exit 1
     ;;
 esac
