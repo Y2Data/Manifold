@@ -23,7 +23,7 @@ import uuid
 from app.project_files import build_file_context
 from app.routing.backends import BackendError, BackendResult, run_claude, run_codex, run_generic_cli
 from app.routing.classifier import Tier, classify_with_model
-from app.routing.http_backend import run_http_connection
+from app.routing.http_backend import run_http_connection, run_http_connection_with_tools
 from app.store import (
     add_turn,
     get_connection,
@@ -78,8 +78,13 @@ async def _run_connection(
         return await run_generic_cli(
             connection, prompt, connection.get("default_model") or "", cwd=project_cwd
         )
-    # HTTP connections (Kimi, etc.) have no tool-calling loop at all — the
-    # only way to give them any file awareness is pasting it into the prompt.
+    # OpenAI-wire HTTP connections (Kimi, etc.) get a real function-calling
+    # loop instead — confirmed live kimi-k3 returns genuine tool_calls, not
+    # just text. Anthropic-wire HTTP connections (e.g. Claude on Azure
+    # Foundry) keep the old paste-file-content-into-the-prompt behavior;
+    # that loop hasn't been built/verified for that wire format yet.
+    if connection["wire_api"] == "openai":
+        return await run_http_connection_with_tools(prompt, connection, project_cwd, project_id)
     return await run_http_connection(build_file_context(project_cwd, prompt), connection)
 
 
