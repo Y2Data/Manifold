@@ -33,7 +33,7 @@ def delete_api_key(ref: str) -> None:
         pass  # already gone — fine, this runs on connection delete regardless
 
 
-async def run_http_connection(prompt: str, connection: dict) -> BackendResult:
+async def run_http_connection(prompt: str, connection: dict, timeout_s: float = _TIMEOUT_S) -> BackendResult:
     api_key = keyring.get_password(_KEYRING_SERVICE, connection["api_key_ref"])
     if not api_key:
         raise BackendError(f"no API key stored for connection {connection['name']!r}")
@@ -42,7 +42,7 @@ async def run_http_connection(prompt: str, connection: dict) -> BackendResult:
     model = connection["default_model"]
     t0 = time.monotonic()
 
-    async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+    async with httpx.AsyncClient(timeout=timeout_s) as client:
         if connection["wire_api"] == "anthropic":
             resp = await client.post(
                 f"{base_url}/v1/messages",

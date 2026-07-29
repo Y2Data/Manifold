@@ -22,6 +22,7 @@ from app.routing.router import route
 from app.store import (
     create_project,
     delete_project,
+    get_connection,
     get_default_connection,
     get_project,
     get_project_turns,
@@ -29,23 +30,40 @@ from app.store import (
     list_default_connections,
     list_projects,
     rename_project,
+    set_project_connection,
 )
 
 router = APIRouter()
 
 
 def _fallback_default_connection() -> dict | None:
-    """manifold-deck has no per-project connection binding — sessions show
-    the global default (preferring claude) as their nominal agent."""
+    """manifold-deck has no *global* connection preference beyond this —
+    sessions with no pinned agent show the global default (preferring
+    claude) as their nominal agent."""
     return get_default_connection("claude") or (list_default_connections() or [None])[0]
+
+
+def _project_connection(project: dict) -> dict | None:
+    """The connection a session's agent picker actually shows/uses: the one
+    pinned via the "New session" agent picker or switch-agent
+    (project.pinned_connection_id), if it's still a valid enabled
+    connection, else the global fallback."""
+    pinned_id = project.get("pinned_connection_id")
+    if pinned_id is not None:
+        connection = get_connection(pinned_id)
+        if connection is not None and connection["enabled"]:
+            return connection
+    return _fallback_default_connection()
 
 
 class NewSessionBody(BaseModel):
     # Shape verified against the real server (network capture): agent_id/
     # host_id/labels select which agent+machine a *new* Omnigent session
-    # runs on — manifold-deck has no per-project connection binding yet, so
-    # these are accepted but unused; only workspace (-> project cwd) drives
-    # anything here.
+    # runs on. host_id/labels still have no manifold-deck equivalent
+    # (accepted, unused) but agent_id now pins the picked connection to
+    # this project (see set_project_connection) — picking Kimi here means
+    # every message in this session skips auto-classification entirely and
+    # goes straight to Kimi (router.py's forced_connection_id).
     agent_id: str | None = None
     host_id: str | None = None
     workspace: str
@@ -59,7 +77,10 @@ async def create_session(body: NewSessionBody):
     # matching the real Omnigent UI rather than silently resuming whatever
     # project already lives at that cwd.
     project = create_project(body.workspace)
-    default_connection = _fallback_default_connection()
+    connection_id = ids.connection_id_from_agent(body.agent_id) if body.agent_id else None
+    if connection_id is not None and get_connection(connection_id) is not None:
+        project = set_project_connection(project["id"], connection_id)
+    default_connection = _project_connection(project)
     return mapping.project_to_session_response(project, [], default_connection)
 
 
@@ -75,10 +96,11 @@ async def list_sessions(
     # already ordered by recency (last_used_at DESC) — the filters above are
     # accepted (so FastAPI doesn't 422 on the frontend's real query strings)
     # but otherwise unused.
-    default_connection = _fallback_default_connection()
     projects = list_projects()[:limit]
     data = [
-        mapping.project_to_session_list_item(p, default_connection, permissions.list_pending_for_project(p["id"]))
+        mapping.project_to_session_list_item(
+            p, _project_connection(p), permissions.list_pending_for_project(p["id"])
+        )
         for p in projects
     ]
     return {
@@ -128,7 +150,7 @@ async def get_session(session_id: str, include_items: bool = True, include_liven
     project = get_project(project_id) if project_id is not None else None
     if project is None:
         raise HTTPException(404, "session not found")
-    default_connection = _fallback_default_connection()
+    default_connection = _project_connection(project)
     turns = get_project_turns(project_id) if include_items else []
     pending = permissions.list_pending_for_project(project_id)
     return mapping.project_to_session_response(project, turns, default_connection, pending)
@@ -163,7 +185,28 @@ async def patch_session(session_id: str, body: UpdateSessionBody):
         raise HTTPException(404, "session not found")
     if body.title is not None:
         project = rename_project(project_id, body.title)
-    default_connection = _fallback_default_connection()
+    default_connection = _project_connection(project)
+    turns = get_project_turns(project_id)
+    pending = permissions.list_pending_for_project(project_id)
+    return mapping.project_to_session_response(project, turns, default_connection, pending)
+
+
+@router.post("/v1/sessions/{session_id}/switch-agent")
+async def switch_agent(session_id: str, body: dict):
+    # Real shape (OpenAPI: SessionSwitchAgentRequest): {"agent_id": "..."}
+    # -> updated SessionResponse. Rebinds this session's pinned connection
+    # in place — same real mechanism as picking an agent at session
+    # creation (set_project_connection), just callable after the fact.
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    agent_id = body.get("agent_id")
+    connection_id = ids.connection_id_from_agent(agent_id) if agent_id else None
+    if connection_id is None or get_connection(connection_id) is None:
+        raise HTTPException(400, f"unknown agent_id: {agent_id!r}")
+    project = set_project_connection(project_id, connection_id)
+    default_connection = _project_connection(project)
     turns = get_project_turns(project_id)
     pending = permissions.list_pending_for_project(project_id)
     return mapping.project_to_session_response(project, turns, default_connection, pending)
@@ -294,12 +337,24 @@ async def post_session_event(session_id: str, body: SessionEventBody, background
     # result as real SSE events once it resolves, rather than blocking
     # this request for however long the model takes.
     pending_id = f"pending_{uuid.uuid4().hex}"
-    background_tasks.add_task(_route_and_publish, session_id, project_id, model_prompt, pending_id, display_text)
+    # A pinned connection (agent picked at session creation or via
+    # switch-agent) means there's nothing to classify — go straight to it,
+    # same as the dashboard's own pinned-model feature already does via
+    # forced_connection_id.
+    forced_connection_id = project.get("pinned_connection_id")
+    background_tasks.add_task(
+        _route_and_publish, session_id, project_id, model_prompt, pending_id, display_text, forced_connection_id
+    )
     return {"queued": True, "pending_id": pending_id}
 
 
 async def _route_and_publish(
-    session_id: str, project_id: int, prompt: str, pending_id: str, display_text: str | None = None
+    session_id: str,
+    project_id: int,
+    prompt: str,
+    pending_id: str,
+    display_text: str | None = None,
+    forced_connection_id: int | None = None,
 ) -> None:
     _publish_status(session_id, "running")
     routes_stream.publish(
@@ -322,7 +377,7 @@ async def _route_and_publish(
         },
     )
     try:
-        decisions = await route(project_id, prompt, display_content=display_text)
+        decisions = await route(project_id, prompt, display_content=display_text, forced_connection_id=forced_connection_id)
     except BackendError as exc:
         _publish_status(session_id, "idle", error=str(exc))
         return
@@ -404,9 +459,10 @@ async def get_session_terminals(session_id: str, order: str = "asc", limit: int 
 @router.get("/v1/sessions/{session_id}/agent")
 async def get_session_agent(session_id: str):
     project_id = ids.project_id_from_session(session_id)
-    if project_id is None or get_project(project_id) is None:
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
         raise HTTPException(404, "session not found")
-    connection = _fallback_default_connection()
+    connection = _project_connection(project)
     if connection is None:
         raise HTTPException(404, "no connection configured")
     return mapping.connection_to_agent(connection)

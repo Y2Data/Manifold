@@ -8,11 +8,16 @@ _DB_PATH = Path(__file__).resolve().parent.parent / "data" / "manifold.db"
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    cwd TEXT NOT NULL UNIQUE,
+    cwd TEXT NOT NULL,
     name TEXT NOT NULL,
     created_at REAL NOT NULL,
     last_used_at REAL NOT NULL,
-    starred INTEGER NOT NULL DEFAULT 0
+    starred INTEGER NOT NULL DEFAULT 0,
+    pinned_connection_id INTEGER  -- set when a session picks a specific
+                                   -- agent (Omnigent-compat "New session"
+                                   -- agent picker / switch-agent) — skips
+                                   -- auto-classification entirely, see
+                                   -- router.py's forced_connection_id
 );
 
 CREATE TABLE IF NOT EXISTS turns (
@@ -137,6 +142,8 @@ def _connect() -> sqlite3.Connection:
     project_cols = {row[1] for row in conn.execute("PRAGMA table_info(projects)")}
     if "starred" not in project_cols:
         conn.execute("ALTER TABLE projects ADD COLUMN starred INTEGER NOT NULL DEFAULT 0")
+    if "pinned_connection_id" not in project_cols:
+        conn.execute("ALTER TABLE projects ADD COLUMN pinned_connection_id INTEGER")
     return conn
 
 
@@ -192,11 +199,15 @@ def get_project(project_id: int) -> dict | None:
 
 
 def delete_project(project_id: int) -> None:
-    """Deletes a project and its turns. Leaves `imported_files` alone — a
-    file already marked imported stays skipped on future import runs, so
-    deleting a junk imported project doesn't cause it to reappear."""
+    """Deletes a project, its turns, and its uploaded-file records (both
+    FOREIGN KEY project_id). Leaves `imported_files` alone — a file already
+    marked imported stays skipped on future import runs, so deleting a junk
+    imported project doesn't cause it to reappear. Leaves the physical
+    uploaded files on disk too, same as every other real file in the
+    project's own cwd — deleting a project never touches its directory."""
     with _connect() as conn:
         conn.execute("DELETE FROM turns WHERE project_id = ?", (project_id,))
+        conn.execute("DELETE FROM session_files WHERE project_id = ?", (project_id,))
         conn.execute("DELETE FROM projects WHERE id = ?", (project_id,))
 
 
@@ -222,6 +233,18 @@ def rename_project(project_id: int, name: str) -> dict | None:
     with _connect() as conn:
         conn.row_factory = sqlite3.Row
         conn.execute("UPDATE projects SET name = ? WHERE id = ?", (name, project_id))
+        row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_project_connection(project_id: int, connection_id: int | None) -> dict | None:
+    """Pins a project to a specific connection — picking an agent in the
+    Omnigent-compat "New session" flow, or POST .../switch-agent. When set,
+    route() skips auto-classification entirely and always uses this
+    connection (see routes_sessions.py's forced_connection_id wiring)."""
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute("UPDATE projects SET pinned_connection_id = ? WHERE id = ?", (connection_id, project_id))
         row = conn.execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
         return dict(row) if row else None
 
