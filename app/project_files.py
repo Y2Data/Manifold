@@ -15,8 +15,15 @@ from pathlib import Path
 
 SKIP_DIRS = {
     ".git", "node_modules", ".venv", "__pycache__", ".DS_Store", "dist", "build",
-    ".claude", ".pytest_cache",
+    ".claude", ".pytest_cache", ".manifold-uploads",
 }
+
+# Where the Omnigent-compat "Attach files" upload lands (see
+# app/omnigent_compat/routes_resources.py) — inside the project's own cwd
+# so Claude's own Read/Glob tools can see an uploaded file without any
+# extra wiring, but under a dedicated, obviously-not-a-project-file
+# subfolder, excluded from the regular file tree above.
+UPLOADS_DIRNAME = ".manifold-uploads"
 MAX_DEPTH = 3
 MAX_ENTRIES = 300
 MAX_FILE_BYTES = 512_000
@@ -63,6 +70,22 @@ def write_file_text(root: Path, rel_path: str, content: str) -> bool:
         return False
     full.write_text(content, encoding="utf-8")
     return True
+
+
+def attachment_path(cwd: str, file_id: str, filename: str) -> Path:
+    """Where an "Attach files" upload physically lives — same naming
+    scheme app/omnigent_compat/routes_resources.py writes it with."""
+    return Path(cwd) / UPLOADS_DIRNAME / f"{file_id}_{Path(filename).name}"
+
+
+def read_attachment_text(cwd: str, file_id: str, filename: str) -> str | None:
+    path = attachment_path(cwd, file_id, filename)
+    if not path.is_file() or path.stat().st_size > MAX_FILE_BYTES:
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def _render_tree(nodes: list[dict], indent: int = 0) -> list[str]:

@@ -227,11 +227,33 @@ class SessionEventBody(BaseModel):
     # Real shape verified via live network capture (this exact endpoint —
     # POST /v1/sessions/{id}/events — isn't in the OpenAPI spec at all,
     # same as the /v1/sessions/updates websocket): {"type": "message",
-    # "data": {"role": "user", "content": [{"type": "input_text", "text": "..."}]}}.
-    # Note this is the *documented-nested* `data` shape, unlike the
-    # flattened shape /items actually returns — the two aren't symmetric.
+    # "data": {"role": "user", "content": [...]}}. `content` blocks are
+    # either {"type": "input_text", "text": "..."} or, when a file was
+    # attached via the composer, {"type": "input_file", "file_id": "...",
+    # "filename": "..."} — confirmed live (also captured this shape
+    # attempting to reproduce a reported "upload failed: 405" bug: the
+    # upload itself 405'd since only GET existed on .../resources/files;
+    # once that was fixed, this handler was still silently dropping
+    # input_file blocks, since the original join-only-blocks-with-"text"
+    # logic has no "text" key on them at all — hence Claude replying "I
+    # don't see an attached file"). Note this is the *documented-nested*
+    # `data` shape, unlike the flattened shape /items actually returns —
+    # the two aren't symmetric.
     type: str
     data: dict
+
+
+def _attachment_block(project_cwd: str, file_id: str, filename: str) -> str:
+    from app.project_files import read_attachment_text
+    from app.store import get_session_file
+
+    row = get_session_file(file_id)
+    size = row["bytes"] if row else None
+    text = read_attachment_text(project_cwd, file_id, filename)
+    if text is None:
+        note = f" ({size} bytes)" if size is not None else ""
+        return f'Attached file "{filename}"{note} — binary or too large to show inline.'
+    return f'Attached file "{filename}":\n"""\n{text}\n"""'
 
 
 @router.post("/v1/sessions/{session_id}/events", status_code=202)
@@ -243,11 +265,27 @@ async def post_session_event(session_id: str, body: SessionEventBody, background
     if body.type != "message":
         raise HTTPException(400, f"unsupported event type: {body.type!r}")
     content = body.data.get("content") or []
-    prompt = "\n".join(
-        c.get("text", "") for c in content if isinstance(c, dict) and c.get("text")
+    display_text = "\n".join(
+        c.get("text", "") for c in content if isinstance(c, dict) and c.get("type") == "input_text" and c.get("text")
     ).strip()
-    if not prompt:
+    attachments = [
+        (c["file_id"], c.get("filename") or c["file_id"])
+        for c in content
+        if isinstance(c, dict) and c.get("type") == "input_file" and c.get("file_id")
+    ]
+    if not display_text and not attachments:
         raise HTTPException(400, "empty message")
+    if not display_text:
+        # Attachment(s) with no typed text — show something more useful
+        # than a blank chat bubble.
+        display_text = "Attached: " + ", ".join(name for _, name in attachments)
+    # display_text (what gets persisted/shown in the chat history) stays
+    # clean; model_prompt (what actually gets classified/answered) folds
+    # attachment content in so every backend — including tool-less HTTP
+    # ones like Kimi — genuinely sees it, not just claude/codex's own Read
+    # tool picking it up incidentally from the project cwd.
+    attachment_blocks = [_attachment_block(project["cwd"], fid, name) for fid, name in attachments]
+    model_prompt = "\n\n".join(attachment_blocks + [display_text])
 
     # Real response shape is just {"queued": true, "pending_id": "..."} —
     # the actual result arrives later over /stream, not in this response.
@@ -256,11 +294,13 @@ async def post_session_event(session_id: str, body: SessionEventBody, background
     # result as real SSE events once it resolves, rather than blocking
     # this request for however long the model takes.
     pending_id = f"pending_{uuid.uuid4().hex}"
-    background_tasks.add_task(_route_and_publish, session_id, project_id, prompt, pending_id)
+    background_tasks.add_task(_route_and_publish, session_id, project_id, model_prompt, pending_id, display_text)
     return {"queued": True, "pending_id": pending_id}
 
 
-async def _route_and_publish(session_id: str, project_id: int, prompt: str, pending_id: str) -> None:
+async def _route_and_publish(
+    session_id: str, project_id: int, prompt: str, pending_id: str, display_text: str | None = None
+) -> None:
     _publish_status(session_id, "running")
     routes_stream.publish(
         session_id,
@@ -271,14 +311,18 @@ async def _route_and_publish(session_id: str, project_id: int, prompt: str, pend
             "data": {
                 "item_id": f"user_{pending_id}",
                 "type": "message",
-                "data": {"role": "user", "content": [{"type": "input_text", "text": prompt}], "agent": None},
+                "data": {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": display_text if display_text is not None else prompt}],
+                    "agent": None,
+                },
                 "created_by": None,
             },
             "cleared_pending_id": pending_id,
         },
     )
     try:
-        decisions = await route(project_id, prompt)
+        decisions = await route(project_id, prompt, display_content=display_text)
     except BackendError as exc:
         _publish_status(session_id, "idle", error=str(exc))
         return

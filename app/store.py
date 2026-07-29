@@ -67,6 +67,20 @@ CREATE TABLE IF NOT EXISTS imported_files (
     imported_at REAL NOT NULL,
     turns_added INTEGER NOT NULL
 );
+
+-- Metadata for files uploaded via the Omnigent-compat "Attach files" UI
+-- (app/omnigent_compat/routes_resources.py). The bytes themselves live on
+-- disk under the project's own cwd (see project_files.UPLOADS_DIRNAME) —
+-- this table is just the id <-> filename/size/time index the real
+-- server's SessionResourceObject shape needs.
+CREATE TABLE IF NOT EXISTS session_files (
+    id TEXT PRIMARY KEY,
+    project_id INTEGER NOT NULL,
+    filename TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (project_id) REFERENCES projects(id)
+);
 """
 
 
@@ -377,6 +391,39 @@ def record_imported_file(path: str, mtime: float, turns_added: int) -> None:
             """,
             (path, mtime, now, turns_added),
         )
+
+
+def add_session_file(file_id: str, project_id: int, filename: str, size_bytes: int) -> dict:
+    now = __import__("time").time()
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        conn.execute(
+            "INSERT INTO session_files (id, project_id, filename, bytes, created_at) VALUES (?, ?, ?, ?, ?)",
+            (file_id, project_id, filename, size_bytes, now),
+        )
+        row = conn.execute("SELECT * FROM session_files WHERE id = ?", (file_id,)).fetchone()
+        return dict(row)
+
+
+def list_session_files(project_id: int) -> list[dict]:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM session_files WHERE project_id = ? ORDER BY created_at ASC", (project_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_session_file(file_id: str) -> dict | None:
+    with _connect() as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM session_files WHERE id = ?", (file_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def delete_session_file(file_id: str) -> None:
+    with _connect() as conn:
+        conn.execute("DELETE FROM session_files WHERE id = ?", (file_id,))
 
 
 def summary() -> dict:

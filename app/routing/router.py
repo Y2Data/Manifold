@@ -89,9 +89,17 @@ async def route(
     *,
     forced_connection_id: int | None = None,
     forced_tier: Tier | None = None,
+    display_content: str | None = None,
 ) -> list[dict]:
     """Returns a list of decision dicts (len 1 normally, len 2 on fan-out).
-    Each also carries the BackendResult under 'result' for the caller."""
+    Each also carries the BackendResult under 'result' for the caller.
+
+    display_content, when given, is what gets persisted/shown as the user's
+    turn instead of `prompt` itself — used by the Omnigent-compat "Attach
+    files" flow (routes_sessions.py), which folds an uploaded file's
+    content into `prompt` so every backend (including tool-less HTTP ones)
+    actually sees it, but shouldn't dump that raw text into the visible
+    chat history every time the conversation is reloaded."""
     context_prompt = _build_context(project_id, prompt)
     project = get_project(project_id)
     project_cwd = project["cwd"] if project else None
@@ -100,7 +108,8 @@ async def route(
     add_turn(
         {
             "project_id": project_id, "ts": time.time(), "role": "user",
-            "backend": None, "model": None, "tier": None, "content": prompt,
+            "backend": None, "model": None, "tier": None,
+            "content": display_content if display_content is not None else prompt,
             "latency_ms": None, "classify_ms": None, "cost_usd": None,
             "input_tokens": None, "output_tokens": None, "fanout_group": None,
         }

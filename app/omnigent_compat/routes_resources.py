@@ -5,13 +5,21 @@ used by app/routers/projects.py for the dashboard's own Files panel.
 
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 
 from app.omnigent_compat import ids
-from app.store import get_project
+from app.store import (
+    add_session_file,
+    delete_session_file,
+    get_project,
+    get_session_file,
+)
+from app.store import list_session_files as store_list_session_files
 
 router = APIRouter()
 
@@ -81,17 +89,112 @@ async def list_resources(session_id: str):
     return {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
 
 
+def _file_resource_object(row: dict) -> dict:
+    # Shape verified live against the real server (curl multipart upload):
+    # {id, object:"session.resource", type:"file", session_id, name,
+    # metadata:{filename, bytes, created_at}}.
+    return {
+        "id": row["id"],
+        "object": "session.resource",
+        "type": "file",
+        "session_id": ids.session_id(row["project_id"]),
+        "name": row["filename"],
+        "metadata": {
+            "filename": row["filename"],
+            "bytes": row["bytes"],
+            "created_at": int(row["created_at"]),
+        },
+    }
+
+
+def _upload_disk_path(cwd: str, file_id: str, filename: str) -> Path:
+    # Shared with router.py's attachment-content injection (project_files.
+    # attachment_path) so both sides agree on where an upload physically
+    # lives. file_id prefix guarantees no collision even if two uploads
+    # share a filename.
+    from app.project_files import attachment_path
+
+    path = attachment_path(cwd, file_id, filename)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
 @router.get("/v1/sessions/{session_id}/resources/files")
 async def list_session_files(session_id: str):
-    # "Files" here is a distinct real-server concept from the environment
-    # filesystem above — standalone uploaded attachments (per POST
-    # .../resources/files). manifold-deck has no upload/attachment
-    # storage, so an honest empty list rather than a placeholder.
+    # "Files" is a distinct real-server concept from the environment
+    # filesystem above — standalone uploaded attachments ("Attach files" in
+    # the message composer). Real implementation: uploads land inside the
+    # project's own cwd (see app/project_files.UPLOADS_DIRNAME) so Claude's
+    # own Read/Glob tools can see them, tracked in store.session_files for
+    # the metadata this listing needs.
     project_id = ids.project_id_from_session(session_id)
     project = get_project(project_id) if project_id is not None else None
     if project is None:
         raise HTTPException(404, "session not found")
-    return {"object": "list", "data": [], "first_id": None, "last_id": None, "has_more": False}
+    data = [_file_resource_object(r) for r in store_list_session_files(project_id)]
+    return {
+        "object": "list",
+        "data": data,
+        "first_id": data[0]["id"] if data else None,
+        "last_id": data[-1]["id"] if data else None,
+        "has_more": False,
+    }
+
+
+@router.post("/v1/sessions/{session_id}/resources/files", status_code=201)
+async def upload_session_file(session_id: str, file: UploadFile = File(...)):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    filename = Path(file.filename or "upload").name
+    content = await file.read()
+    file_id = uuid.uuid4().hex
+    _upload_disk_path(project["cwd"], file_id, filename).write_bytes(content)
+    row = add_session_file(file_id, project_id, filename, len(content))
+    return _file_resource_object(row)
+
+
+@router.get("/v1/sessions/{session_id}/resources/files/{file_id}")
+async def get_session_file_metadata(session_id: str, file_id: str):
+    project_id = ids.project_id_from_session(session_id)
+    if project_id is None or get_project(project_id) is None:
+        raise HTTPException(404, "session not found")
+    row = get_session_file(file_id)
+    if row is None or row["project_id"] != project_id:
+        raise HTTPException(404, "file not found")
+    return _file_resource_object(row)
+
+
+@router.get("/v1/sessions/{session_id}/resources/files/{file_id}/content")
+async def get_session_file_content(session_id: str, file_id: str):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    row = get_session_file(file_id)
+    if row is None or row["project_id"] != project_id:
+        raise HTTPException(404, "file not found")
+    path = _upload_disk_path(project["cwd"], file_id, row["filename"])
+    if not path.is_file():
+        raise HTTPException(404, "file content missing on disk")
+    return Response(content=path.read_bytes(), media_type="application/octet-stream")
+
+
+@router.delete("/v1/sessions/{session_id}/resources/files/{file_id}")
+async def delete_session_file_route(session_id: str, file_id: str):
+    project_id = ids.project_id_from_session(session_id)
+    project = get_project(project_id) if project_id is not None else None
+    if project is None:
+        raise HTTPException(404, "session not found")
+    row = get_session_file(file_id)
+    if row is None or row["project_id"] != project_id:
+        raise HTTPException(404, "file not found")
+    path = _upload_disk_path(project["cwd"], file_id, row["filename"])
+    path.unlink(missing_ok=True)
+    delete_session_file(file_id)
+    # Real shape verified live: {id, object:"session.resource.deleted", deleted:true}.
+    return {"id": file_id, "object": "session.resource.deleted", "deleted": True}
 
 
 @router.get("/v1/sessions/{session_id}/resources/environments/default/changes")
